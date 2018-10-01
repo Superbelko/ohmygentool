@@ -1,0 +1,73 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "properties":{
+        "version": {
+            "type": "integer",
+            "default": 1,
+            "description": "Configuration file version"
+        }, 
+        "input": {
+            "type": "object",
+            "description": "Configuration for C/C++ inputs",
+            "$ref": "#/definitions/input-schema"
+        }, 
+        "output": {
+            "type": "object",
+            "description": "Output properties such as target language plugin and parameters",
+            "$ref": "#/definitions/output-schema"
+        }
+    },
+    "required":[
+        "input", "output"
+    ],
+
+    "definitions": {
+        "input-schema": {
+            "properties": {
+                "std": {
+                    "type": "string",
+                    "pattern": "(c|c\\+\\+)([0-9a-f]+)",
+                    "description": "Input language standard version, examples 'c99' or 'c++14'"
+                },
+                "paths": {
+                    "type": "array",
+                    "description": "List of input files or paths that will be processed"
+                },
+                "includes": {
+                    "type": "array",
+                    "description": "List of files or paths that will not be processed directly but will be used for lookups"
+                },
+                "system": {
+                    "type": "array",
+                    "description": "List of system includes that is not related to the project itself"
+                },
+                "defines": {
+                    "type": "array",
+                    "description": "List of macro definitions used for this build configuration"
+                },
+                "cflags": {
+                    "type": "array",
+                    "description": "List of additional compiler flags used for this input"
+                }
+            },
+            "required": [
+                "std", "paths"
+            ]
+        },
+        "output-schema": {
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Output path for processed data"
+                },
+                "target": {
+                    "type": "string",
+                    "description": "Target language (plugin)"
+                }
+            },
+            "required": [
+                "path", "target"
+            ]
+        }
+    }
+}
