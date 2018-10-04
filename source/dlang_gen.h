@@ -113,10 +113,30 @@ private:
     template <typename T, typename S>
     bool addType(const T* entry, S& dict)
     {
+#ifdef EXPERIMENTAL_FS
         namespace fs = std::experimental::filesystem;
+#else
+        namespace fs = std::filesystem;
+#endif
         std::string loc = entry->getLocStart().printToString(entry->getASTContext().getSourceManager());
+        std::string lineCol;
+        size_t colPos = std::string::npos;
+
+        auto dotPos = loc.find_last_of('.');
+        if (dotPos != std::string::npos)
+        {
+            colPos = loc.find_last_of(':', dotPos);
+            if (colPos != std::string::npos)
+            {
+                lineCol = loc.substr(colPos);
+                loc = loc.substr(0, colPos);
+            }
+        }
+
 		std::error_code _;
 		loc = fs::canonical(loc, _).string();
+        if (colPos != std::string::npos)
+            loc.append(lineCol);
         bool res = false;
 
 		if ( dict.find(loc) == dict.end() )

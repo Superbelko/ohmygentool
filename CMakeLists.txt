@@ -15,6 +15,19 @@ add_definitions(${CLANG_DEFINITION})
 
 include_directories("include" "source")
 
+include(CheckCXXSourceCompiles)
+set(CMAKE_REQUIRED_FLAGS -std=c++17)
+check_cxx_source_compiles(
+    "
+    #if __has_include(<filesystem>)
+    #include <filesystem>
+    #else
+    #include <experimental/filesystem>
+    #endif
+    namespace fs = std::filesystem;
+    int main(int argc, char** argv) { return 0;}
+    " GENTOOL_IS_STABLE_FS
+)
 
 # Now build our tools
 add_executable(gentool source/main.cpp source/clangparser.cpp source/dlang_gen.cpp source/iohelpers.cpp)
@@ -22,6 +35,12 @@ add_executable(gentool source/main.cpp source/clangparser.cpp source/dlang_gen.c
 # Find the libraries that correspond to the LLVM components
 # that we wish to use
 llvm_map_components_to_libnames(llvm_libs support core irreader)
+
+if (${GENTOOL_IS_STABLE_FS})
+target_compile_definitions(gentool PRIVATE EXPERIMENTAL_FS=0)
+else ()
+target_compile_definitions(gentool PRIVATE EXPERIMENTAL_FS=1)
+endif ()
 
 # Link against LLVM libraries
 target_link_libraries( gentool 
@@ -37,3 +56,43 @@ target_link_libraries( gentool
 
 set_property(TARGET gentool PROPERTY CXX_STANDARD 17)
 set_property(TARGET gentool PROPERTY CXX_STANDARD_REQUIRED ON)
+
+
+check_cxx_source_compiles(
+    "
+    #include <ciso646>
+    #ifndef (__GLIBCXX__)
+    static_assert(0);
+    #endif
+    int main(int argc, char** argv) { return 0;}
+    " GENTOOL_GNU_LIBCXX
+)
+
+check_cxx_source_compiles(
+    "
+    #include <ciso646>
+    #ifndef (_LIBCPP_VERSION)
+    static_assert(0);
+    #endif
+    int main(int argc, char** argv) { return 0;}
+    " GENTOOL_LLVM_LIBCXX
+)
+
+if (UNIX)
+    
+    if (${GENTOOL_GNU_LIBCXX})
+        target_link_libraries(gentool -lstdc++)
+        if (NOT $GENTOOL_IS_STABLE_FS)
+        target_link_libraries(gentool -lstdc++fs)
+        endif ()
+    endif ()
+
+    if (${GENTOOL_USING_LIBCXX})
+        target_link_libraries(gentool -lc++)
+        if (NOT $GENTOOL_IS_STABLE_FS)
+        target_link_libraries(gentool -lc++experimental)
+        endif ()
+    endif ()
+
+    target_compile_options(gentool PRIVATE "-fno-rtti")
+endif (UNIX)

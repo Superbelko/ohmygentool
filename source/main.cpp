@@ -71,7 +71,7 @@ using namespace clang::driver;
 using namespace clang::tooling;
 using namespace gentool;
 
-#ifdef _MSC_VER
+#ifdef EXPERIMENTAL_FS
 namespace fs = std::experimental::filesystem;
 #else
 namespace fs = std::filesystem;

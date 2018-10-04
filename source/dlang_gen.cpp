@@ -26,7 +26,7 @@
 #include "clangparser.h"
 #include "iohelpers.h"
 
-#ifdef _MSC_VER
+#ifdef EXPERIMENTAL_FS
 namespace fs = std::experimental::filesystem;
 #else
 namespace fs = std::filesystem;
@@ -219,15 +219,7 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
     finalTypeName = merge(declStack).append(classOrStructName);
     declStack.push_back(decl);
 
-    std::string loc = decl->getLocStart().printToString(decl->getASTContext().getSourceManager());
-    std::error_code _;
-    loc = fs::canonical(loc, _).string();
-
-    if (storedTypes.find(loc) == storedTypes.end())
-    {
-        storedTypes.insert(std::make_pair(loc, decl));
-    }
-    else
+    if (!addType(decl, storedTypes))
         return;
 
     // namespace
@@ -355,15 +347,7 @@ void DlangBindGenerator::onStructOrClassLeave(const clang::RecordDecl *decl)
 
 void DlangBindGenerator::onEnum(const clang::EnumDecl *decl)
 {
-    std::string loc = decl->getLocStart().printToString(decl->getASTContext().getSourceManager());
-    std::error_code _;
-    loc = fs::canonical(loc, _).string();
-
-    if (enumDecls.find(loc) == enumDecls.end())
-    {
-        enumDecls.insert(std::make_pair(loc, decl));
-    }
-    else
+    if (!addType(decl, enumDecls))
         return;
 
     const auto size = std::distance(decl->enumerator_begin(), decl->enumerator_end());
@@ -402,79 +386,65 @@ void DlangBindGenerator::onEnum(const clang::EnumDecl *decl)
 
 void DlangBindGenerator::onFunction(const clang::FunctionDecl *decl)
 {
-    std::string loc = decl->getLocStart().printToString(decl->getASTContext().getSourceManager());
-    std::error_code _;
-    loc = fs::canonical(loc, _).string();
+    if (!addType(decl, functionDecls))
+        return;
 
-    if (functionDecls.find(loc) == functionDecls.end())
+    const auto fn = decl;
+    // linkage
+    out << "extern(" << externAsString(fn->isExternC()) << ") " << std::endl;
+
+    // ret type
     {
-        functionDecls.insert(std::make_pair(loc, decl));
-
-        const auto fn = decl;
-        // linkage
-        out << "extern(" << externAsString(fn->isExternC())  << ") " << std::endl;
-
-        // ret type
-        {
-            const auto typeStr = toDStyle(fn->getReturnType());
-            out << typeStr << " ";
-        }
-        // function name
-        out << fn->getName().str() << " (";
-
-        if (fn->isTemplated())
-        {
-            // note that we write to already opened parenthesis
-            const auto ftd = fn->getDescribedTemplate();
-            const auto tplist = ftd->getTemplateParameters();
-            for (const auto tp : *tplist)
-            {
-                out << tp->getName().str();
-                if (tp != *(tplist->end() - 1))
-                    out << ", ";
-            }
-            // close template params list and open runtime args
-            out << ")(";
-        }
-
-        // argument list
-        for (auto p = fn->param_begin(); p != fn->param_end(); p++)
-        {
-            if (p != fn->param_begin() && p != fn->param_end())
-                out << ", ";
-
-            const auto typeStr = toDStyle((*p)->getType());
-            out << typeStr << " " << sanitizedIdentifier((*p)->getName().str());
-
-            if (const auto defaultVal = (*p)->getDefaultArg())
-            {
-                std::string s;
-                llvm::raw_string_ostream os(s);
-                defaultVal->printPretty(os, nullptr, *ClangParser::g_printPolicy);
-                out << " = " << os.str();
-            }
-        }
-        out << ")";
-        if (nogc) 
-            out << " @nogc";
-        out << ";" << std::endl;
-
-        out << std::endl;
+        const auto typeStr = toDStyle(fn->getReturnType());
+        out << typeStr << " ";
     }
+    // function name
+    out << fn->getName().str() << " (";
+
+    if (fn->isTemplated())
+    {
+        // note that we write to already opened parenthesis
+        const auto ftd = fn->getDescribedTemplate();
+        const auto tplist = ftd->getTemplateParameters();
+        for (const auto tp : *tplist)
+        {
+            out << tp->getName().str();
+            if (tp != *(tplist->end() - 1))
+                out << ", ";
+        }
+        // close template params list and open runtime args
+        out << ")(";
+    }
+
+    // argument list
+    for (auto p = fn->param_begin(); p != fn->param_end(); p++)
+    {
+        if (p != fn->param_begin() && p != fn->param_end())
+            out << ", ";
+
+        const auto typeStr = toDStyle((*p)->getType());
+        out << typeStr << " " << sanitizedIdentifier((*p)->getName().str());
+
+        if (const auto defaultVal = (*p)->getDefaultArg())
+        {
+            std::string s;
+            llvm::raw_string_ostream os(s);
+            defaultVal->printPretty(os, nullptr, *ClangParser::g_printPolicy);
+            out << " = " << os.str();
+        }
+    }
+    out << ")";
+    if (nogc)
+        out << " @nogc";
+    out << ";" << std::endl;
+
+    out << std::endl;
 }
 
 
 void DlangBindGenerator::onTypedef(const clang::TypedefDecl *decl)
 {
-    std::string loc = decl->getLocStart().printToString(decl->getASTContext().getSourceManager());
-    std::error_code _;
-    loc = fs::canonical(loc, _).string();
-
-    if (storedTypes.find(loc) == storedTypes.end())
-    {
-        storedTypes.insert(std::make_pair(loc, decl));
-    }
-    else
+    if (!addType(decl, storedTypes))
         return;
 
     const auto typedefName = decl->getName().str();
@@ -517,15 +487,7 @@ void DlangBindGenerator::onTypedef(const clang::TypedefDecl *decl)
 
 void DlangBindGenerator::onGlobalVar(const clang::VarDecl *decl)
 {
-    std::string loc = decl->getLocStart().printToString(decl->getASTContext().getSourceManager());
-    std::error_code _;
-    loc = fs::canonical(loc, _).string();
-
-    if (storedTypes.find(loc) == storedTypes.end())
-    {
-        storedTypes.insert(std::make_pair(loc, decl));
-    }
-    else
+    if (!addType(decl, storedTypes))
         return;
 
     bool extC = decl->isExternC();
@@ -938,6 +900,7 @@ void DlangBindGenerator::fieldIterate(const clang::RecordDecl *decl)
             // pad it!
             if (isPrevIsBitfield)
             {
+                IndentBlock _indent(out, 4);
                 // still on same line
                 out << "," << std::endl;
 
@@ -971,6 +934,7 @@ void DlangBindGenerator::fieldIterate(const clang::RecordDecl *decl)
         //out << "    ";
         if (bitfield)
         {
+            IndentBlock _indent(out, 4);
             if (isPrevIsBitfield) // we are still on same line
                 out << "," << std::endl;
             out << toDStyle(it->getType()) << ", ";
