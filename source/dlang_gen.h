@@ -9,12 +9,14 @@
 #include <fstream>
 #include <string>
 #include <algorithm>
-#include <filesystem>
 #include <unordered_map>
-//#include <utility>
-//#include <list>
 #include <string_view>
-//#include <tuple>
+
+#if __has_include(<filesystem>)
+#include <filesystem>
+#else
+#include <experimental/filesystem>
+#endif
 
 #ifdef _WIN32
 #include <corecrt_wstdio.h>
@@ -56,9 +58,8 @@
 struct DlangBindGenerator : public gentool::IAbstractGenerator
 {
 protected:
-    std::ofstream consoleOut = std::ofstream(stdout);
 	std::ofstream fileOut;
-	OutStreamHelper out = OutStreamHelper(&consoleOut, &fileOut);
+	OutStreamHelper out = OutStreamHelper(&std::cout, &fileOut);
 	std::string classOrStructName;
 	std::string finalTypeName;
 	std::list<const clang::RecordDecl*> declStack; // for nesting structs or enums

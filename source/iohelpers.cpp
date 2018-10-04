@@ -3,7 +3,7 @@
 
 OutStreamHelper& operator<< (OutStreamHelper& s, std::ostream& (*manip)(std::ostream &))
 {
-	for(std::ofstream* out: s.writers)
+	for(std::ostream* out: s.writers)
 	{
 		manip(*out);
 	}

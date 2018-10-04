@@ -1,9 +1,7 @@
 
 #include "dlang_gen.h"
 
-#include <filesystem>
 #include <sstream>
-#include <string_view>
 
 #include "llvm/ADT/ArrayRef.h"
 #include "clang/AST/AST.h"
@@ -28,8 +26,11 @@
 #include "clangparser.h"
 #include "iohelpers.h"
 
-
+#ifdef _MSC_VER
 namespace fs = std::experimental::filesystem;
+#else
+namespace fs = std::filesystem;
+#endif
 
 
 using namespace clang;

@@ -8,7 +8,7 @@
 
 struct OutStreamHelper
 {
-	OutStreamHelper(std::ofstream* a = nullptr, std::ofstream* b = nullptr)
+	OutStreamHelper(std::ostream* a = nullptr, std::ostream* b = nullptr)
 	{
 		if (a)
 		writers.push_back(a);
@@ -37,7 +37,7 @@ struct OutStreamHelper
 
 	size_t _indent = 0;
 	bool isNewline = true;
-	std::vector<std::ofstream*> writers;
+	std::vector<std::ostream*> writers;
 };
 
 /*
@@ -65,7 +65,7 @@ OutStreamHelper& operator<< (OutStreamHelper& s, const IndentHelper& indent)
 template <typename T>
 OutStreamHelper& operator<< (OutStreamHelper& s, const T& t)
 {
-	for(std::ofstream* out: s.writers)
+	for(std::ostream* out: s.writers)
 	{
 		if (s.isNewline)
 			for(size_t i = 0; i < s._indent; i++) { *out << ' '; }

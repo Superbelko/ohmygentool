@@ -12,7 +12,6 @@
 // - [FEATURE] move away from eager writting, required for proper handling C style enum - typedef enum {wutever1, wutever2} enumName;
 // - replace -> and :: with dot, initializer expr with macro results in <null epxr>, 
 
-#include <array>
 #include <memory>
 #include <iostream>
 #include <ostream>
@@ -21,11 +20,9 @@
 #include <streambuf>
 #include <string>
 #include <algorithm>
-#include <filesystem>
 #include <unordered_map>
 #include <utility>
 #include <list>
-#include <string_view>
 #include <tuple>
 
 #ifdef _WIN32
@@ -74,7 +71,11 @@ using namespace clang::driver;
 using namespace clang::tooling;
 using namespace gentool;
 
+#ifdef _MSC_VER
 namespace fs = std::experimental::filesystem;
+#else
+namespace fs = std::filesystem;
+#endif
 
 
 
@@ -249,7 +250,7 @@ void _readJSONArrayMember(decltype(InputOptions::paths)& arr, const rapidjson::V
 		for (const auto& e : it->value.GetArray())
 			arr.push_back(std::string(e.GetString()));
 	else 
-		throw std::exception("Member not found");
+		throw std::runtime_error("Member not found");
 }
 
 #include <cctype> // std::tolower
@@ -262,7 +263,7 @@ std::tuple<InputOptions, OutputOptions, bool> readJSON(const std::string_view da
 	bool res = true;
 	rapidjson::Document document;
 	auto r = document.Parse<parserFlags>(data.data()).HasParseError();
-	if (r) throw std::exception("Malformed JSON");
+	if (r) throw std::runtime_error("Malformed JSON");
 
 	const auto& input = document["input"];
 	inopts.standard = std::string(input["std"].GetString());
@@ -288,7 +289,7 @@ std::tuple<InputOptions, OutputOptions, bool> readJSON(const std::string_view da
 			[](unsigned char c) { return std::tolower(c); }
 		);
 		if ( std::find(targets.begin(), targets.end(), str) == targets.end() )
-			throw std::exception("Only D target supported at this moment");
+			throw std::runtime_error("Only D target supported at this moment");
 	}
 
 	auto attrnogc = output.FindMember("attr-nogc");
@@ -304,7 +305,7 @@ std::tuple<InputOptions, OutputOptions, bool> readJSON(const std::string_view da
 
 std::string readFile(const std::string_view path)
 {
-	std::ifstream t(path);
+	std::ifstream t(path.data());
 	t.seekg(0, std::ios::end);
 	size_t size = t.tellg();
 	std::string buffer(size, ' ');
