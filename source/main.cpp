@@ -71,10 +71,11 @@ using namespace clang::driver;
 using namespace clang::tooling;
 using namespace gentool;
 
-#ifdef EXPERIMENTAL_FS
-namespace fs = std::experimental::filesystem;
-#else
+#if __cpp_lib_filesystem
 namespace fs = std::filesystem;
+#elif __cpp_lib_experimental_filesystem
+namespace fs = std::experimental::filesystem;
+#else error "C++17 Filesystem feature not detected"
 #endif
 
 

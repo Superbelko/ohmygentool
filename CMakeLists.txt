@@ -36,12 +36,6 @@ add_executable(gentool source/main.cpp source/clangparser.cpp source/dlang_gen.c
 # that we wish to use
 llvm_map_components_to_libnames(llvm_libs support core irreader)
 
-if (${GENTOOL_IS_STABLE_FS})
-target_compile_definitions(gentool PRIVATE EXPERIMENTAL_FS=0)
-else ()
-target_compile_definitions(gentool PRIVATE EXPERIMENTAL_FS=1)
-endif ()
-
 # Link against LLVM libraries
 target_link_libraries( gentool 
     ${llvm_libs} 
@@ -61,7 +55,7 @@ set_property(TARGET gentool PROPERTY CXX_STANDARD_REQUIRED ON)
 check_cxx_source_compiles(
     "
     #include <ciso646>
-    #ifndef (__GLIBCXX__)
+    #if !defined(__GLIBCXX__) && !defined(__GLIBCPP__)
     static_assert(0);
     #endif
     int main(int argc, char** argv) { return 0;}

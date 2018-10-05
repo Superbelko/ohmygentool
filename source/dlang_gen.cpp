@@ -26,10 +26,10 @@
 #include "clangparser.h"
 #include "iohelpers.h"
 
-#ifdef EXPERIMENTAL_FS
-namespace fs = std::experimental::filesystem;
-#else
+#if __cpp_lib_filesystem
 namespace fs = std::filesystem;
+#elif __cpp_lib_experimental_filesystem
+namespace fs = std::experimental::filesystem;
 #endif
 
 
