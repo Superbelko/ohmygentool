@@ -31,8 +31,7 @@ private:
 class Derived : public Base
 {
 public:
-    // D still has issues with derived dtor (on windows?)
-    //virtual ~Derived();
+    virtual ~Derived();
     void set(int val);
     virtual void virtualSet(int val);
 protected:

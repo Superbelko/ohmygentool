@@ -44,7 +44,9 @@ def run_tests(tests):
         if not run_single(test, n):
             tests_ok = False
     if not tests_ok:
-        print('Some tests not passed', file=sys.stderr)
+        print('Some tests not passed')
+    else:
+        print('All tests are OK')
 
 
 def run_single(test, num=None):

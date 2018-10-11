@@ -16,9 +16,20 @@ def static_lib_extensions():
     return '.a'
 
 
+def setup_args(args, config='Release'):
+    if is_windows():
+        args.append('msvcrt.lib')
+        args.append('-m32mscoff')
+        args.append('-L/NODEFAULTLIB:libcmt')
+        args.append(f'-L/LIBPATH:{config}')
+    else:
+        args.append('-L-L.')
+        args.append('-L-lstdc++')
+
+
 def cmake_run(path='../cpp', build=True, config='Release', **kwargs):
     '''Runs configure and optional build'''
 
-    subprocess.run(f'cmake {path}', check=True, **kwargs)
+    subprocess.run(f'cmake {path}'.split(), check=True, **kwargs)
     if build:
-        subprocess.run(f'cmake --build . --config {config}', check=True, **kwargs)
+        subprocess.run(f'cmake --build . --config {config}'.split(), check=True, **kwargs)

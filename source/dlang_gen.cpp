@@ -2,6 +2,7 @@
 #include "dlang_gen.h"
 
 #include <sstream>
+#include <iomanip>
 
 #include "llvm/ADT/ArrayRef.h"
 #include "clang/AST/AST.h"
@@ -367,7 +368,7 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
         methodIterate(cxxdecl);
     }
     out << "}" << std::endl;
-    
+
     if (hasNamespace)
     {
         out << "`);" << std::endl;

@@ -108,12 +108,12 @@ void Base::setVal(int val)
     this->val=val;
 }
 
-/*
+
 Derived::~Derived()
 {
     Base::setVal(-1);
 }
-*/
+
 
 
 
@@ -130,4 +130,13 @@ void Derived::set(int val)
 void Derived::virtualSet(int val)
 {
     Derived::setVal(val);
+}
+
+
+void bleh()
+{
+    auto b = new Base();
+    delete b;
+    auto d = new Derived();
+    delete d;
 }
