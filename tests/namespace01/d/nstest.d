@@ -22,6 +22,6 @@ unittest
 {
 	auto o = new Inner();
 	assert(o.getVal() == -42);
-	o.set(42);
-	assert(o.getVal() == 42);
+	o.set(1);
+	assert(o.getVal() == -1);
 }

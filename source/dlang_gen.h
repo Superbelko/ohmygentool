@@ -71,6 +71,7 @@ protected:
 	EnumDecls enumDecls;
     int globalAnonTypeId = 0; // used to deanonimize at global scope
 	int accumBitFieldWidth = 0; // accumulated width in bits, we need to round up to byte, short, int or long and split when necessary
+    int mixinTemplateId = 0; // used to write unique id's for namespace hack
 	bool isPrevIsBitfield = false; // was last field is a bitfield? (needed to split up and pad)
     bool cppIsDefault = true;
     bool nogc = false;
@@ -90,6 +91,11 @@ public:
     virtual void onFunction(const clang::FunctionDecl* decl) override;
     virtual void onTypedef(const clang::TypedefDecl* decl) override;
     virtual void onGlobalVar(const clang::VarDecl* decl) override;
+
+    // Get file path and line & column parts (if any) from source location
+    static std::tuple<std::string, std::string> getFSPathPart(const std::string_view loc);
+    // Get line and column from source location as separate items
+    static std::tuple<std::string, std::string> getLineColumnPart(const std::string_view loc);
 private:
     static std::string _adjustVarInit(const std::string& e);
     static std::string _wrapParens(clang::QualType type);
@@ -108,6 +114,7 @@ private:
     void methodIterate(const clang::CXXRecordDecl* decl);
     void fieldIterate(const clang::RecordDecl* decl);
     void innerDeclIterate(const clang::RecordDecl* decl);
+    std::string getNextMixinId();
     
     // Try to insert entry into dict, return true on success.
     template <typename T, typename S>
@@ -119,26 +126,10 @@ namespace fs = std::filesystem;
 namespace fs = std::experimental::filesystem;
 #endif
         std::string loc = entry->getLocStart().printToString(entry->getASTContext().getSourceManager());
-        std::string lineCol;
-        size_t colPos = std::string::npos;
-
-        auto dotPos = loc.find_last_of('.');
-        if (dotPos != std::string::npos)
-        {
-            colPos = loc.find_first_of(':', dotPos);
-            if (colPos != std::string::npos)
-            {
-                lineCol = loc.substr(colPos);
-                loc = loc.substr(0, colPos);
-            }
-        }
-
-		std::error_code _;
-		loc = fs::canonical(loc, _).string();
-        if (colPos != std::string::npos)
-            loc.append(lineCol);
+        auto [path, linecol] = getFSPathPart(loc);
+        loc = path + linecol;
+        
         bool res = false;
-
 		if ( dict.find(loc) == dict.end() )
 		{
 			dict.insert(std::make_pair(loc, entry));

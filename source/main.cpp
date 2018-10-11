@@ -114,7 +114,7 @@ DeclarationMatcher recordDeclMatcher = recordDecl(
 
 // free functions
 DeclarationMatcher funDeclMatcher = functionDecl(
-	isDefinition(), 
+	//isDefinition(), 
 	hasDeclContext( 
 		anyOf(
 			translationUnitDecl(), 

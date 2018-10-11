@@ -53,6 +53,17 @@ R"(
 import core.stdc.config;
 import std.bitmanip : bitfields;
 
+bool isModuleAvailable(alias T)() {
+    mixin("import " ~ T ~ ";");
+    static if (__traits(compiles, mixin(T).stringof))
+        return true;
+    else
+        return false;
+}
+    
+static if (__traits(compiles, isModuleAvailable!"nsgen" )) 
+    static import nsgen;
+
 struct CppClassSizeAttr
 {
     alias size this;
@@ -69,6 +80,10 @@ CppSizeAttr cppsize(size_t a) { return CppSizeAttr(a); }
 
 struct CppMethodAttr{}
 CppMethodAttr cppmethod() { return CppMethodAttr(); }
+
+struct PyExtract{}
+auto pyExtract(string name = null) { return PyExtract(); }
+
 )";
 
 //
@@ -158,10 +173,14 @@ void textReplaceArrowColon(std::string& in)
 
 bool DlangBindGenerator::isRelevantPath(const std::string_view path)
 {
-    auto file = fs::path(std::string(path));
+    if (path.compare("<invalid loc>") == 0) 
+        return false;
+
+    auto [fullPath, _] = getFSPathPart(path);
+    auto file = fs::path(fullPath);
     for (const auto &p : iops->paths)
     {
-        auto inpath = fs::path(p);
+        auto inpath = fs::canonical(p);
         if (file.string().rfind(inpath.string()) != std::string::npos)
             return true;
     }
@@ -189,6 +208,7 @@ void DlangBindGenerator::setOptions(const InputOptions *inOpt, const OutputOptio
 
 void DlangBindGenerator::prepare()
 {
+    mixinTemplateId = 1;
     out << MODULE_HEADER;
 
     out << std::endl;
@@ -222,26 +242,38 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
     if (!addType(decl, storedTypes))
         return;
 
-    // namespace
-    std::vector<std::string> namespaceParts;
-    getJoinedNS(decl->getDeclContext(), namespaceParts);
-    std::string finalNS;
-    if (namespaceParts.size() > 0)
-    {
-        for (int i = namespaceParts.size() - 1; i >= 0; i--)
-        {
-            finalNS.append(namespaceParts.at(i));
-            if (i > 0)
-                finalNS.append(".");
-        }
-    }
-    // this is unlikely to happen in "plain C" mode
-    out << "extern(" << externAsString();
-    if (finalNS.empty())
-        out << ")";
+    std::vector<std::string> nestedNS;
+    getJoinedNS(decl, nestedNS);
+    const bool hasNamespace = nestedNS.size() > 0;
+    std::string mixinId;
+
+    // Note: until proper solution implemnted in D (probably namespace as string)
+    //  write hacky solution of wrapping namespace
+    //  inside mixin template with code mixin
+    // 
+    // mixin template uniq_id_here {
+    //  mixin(`extern(C++, namespace.list) void actual_function();`)
+    // } mixin uniq_id_here;
+
+    // linkage & namespace
+    if (!hasNamespace)
+        out << "extern(" << externAsString(decl->getDeclContext()->isExternCContext()) << ")" << std::endl;
     else
-        out << ", " << finalNS << ")";
-    out << std::endl;
+    {
+        mixinId = getNextMixinId();
+        out << "mixin template " << mixinId << "() {" << std::endl;
+        out.imore(4); // adds indent to all stuff below
+        out << "mixin(`";
+
+        out << "extern(" << externAsString(decl->getDeclContext()->isExternCContext()) << ", ";
+        auto it = std::rbegin(nestedNS);
+        while (it != nestedNS.rend())
+        {
+            out << *it; if (it != (nestedNS.rend() - 1)) out << ".";
+            it++;
+        }
+        out << ")" << std::endl;
+    }
 
     
 
@@ -335,6 +367,13 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
         methodIterate(cxxdecl);
     }
     out << "}" << std::endl;
+    
+    if (hasNamespace)
+    {
+        out << "`);" << std::endl;
+        out.iless(4); // indent out from mixin
+        out << "} "  << "mixin " << mixinId << ";" << std::endl;
+    }
 }
 
 
@@ -390,8 +429,38 @@ void DlangBindGenerator::onFunction(const clang::FunctionDecl *decl)
         return;
 
     const auto fn = decl;
-    // linkage
-    out << "extern(" << externAsString(fn->isExternC()) << ") " << std::endl;
+    std::vector<std::string> nestedNS;
+    getJoinedNS(decl, nestedNS);
+    const bool hasNamespace = nestedNS.size() > 0;
+    std::string mixinId;
+
+    // Note: until proper solution implemnted in D (probably namespace as string)
+    //  write hacky solution of wrapping namespace
+    //  inside mixin template with code mixin
+    // 
+    // mixin template uniq_id_here {
+    //  mixin(`extern(C++, namespace.list) void actual_function();`)
+    // } mixin uniq_id_here;
+
+    // linkage & namespace
+    if (!hasNamespace)
+        out << "extern(" << externAsString(fn->isExternC()) << ")" << std::endl;
+    else
+    {
+        mixinId = getNextMixinId();
+        out << "mixin template " << mixinId << "() {" << std::endl;
+        out.imore(4); // adds indent to all stuff below
+        out << "mixin(`";
+
+        out << "extern(" << externAsString(fn->isExternC()) << ", ";
+        auto it = std::rbegin(nestedNS);
+        while (it != nestedNS.rend())
+        {
+            out << *it; if (it != (nestedNS.rend() - 1)) out << ".";
+            it++;
+        }
+        out << ")" << std::endl;
+    }
 
     // ret type
     {
@@ -438,6 +507,13 @@ void DlangBindGenerator::onFunction(const clang::FunctionDecl *decl)
         out << " @nogc";
     out << ";" << std::endl;
 
+    if (hasNamespace)
+    {
+        out << "`);" << std::endl;
+        out.iless(4); // indent out from mixin
+        out << "} "  << "mixin " << mixinId << ";" << std::endl;
+    }
+
     out << std::endl;
 }
 
@@ -452,12 +528,6 @@ void DlangBindGenerator::onTypedef(const clang::TypedefDecl *decl)
     bool functionType = decl->getUnderlyingType()->isFunctionType();
     if (decl->getUnderlyingType()->isPointerType())
         functionType = decl->getUnderlyingType()->getPointeeType()->isFunctionType();
-
-    if (decl->getName().compare("JSType") == 0)
-    {
-        bool enum_ = llvm::dyn_cast<EnumDecl>(decl);
-        int x = 0;
-    }
 
     if (auto tdtype = decl->getUnderlyingType().getTypePtr())
     {
@@ -575,6 +645,8 @@ void DlangBindGenerator::_typeRoll(QualType type, std::vector<std::string> &part
     {
         parts.push_back("ref ");
         type = type->getPointeeType();
+        _typeRoll(type, parts);
+        return;
     }
     if (isConst)
         parts.push_back("const(");
@@ -746,7 +818,7 @@ std::string DlangBindGenerator::_toDBuiltInType(QualType type)
         return "bool";
     case TY::Char_S:
     case TY::SChar:
-        return "byte";
+        return "char";
     case TY::Char_U:
     case TY::UChar:
         return "ubyte";
@@ -1022,6 +1094,7 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
         bool isConversionOp = false;
         bool idAssign = false;
         bool disable = false;
+        bool customMangle = false;
 
         // TODO: implicit methods starts at decl position itself, skip anything already listed
         std::string locString = m->getLocStart().printToString(decl->getASTContext().getSourceManager());
@@ -1029,6 +1102,10 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
         {
             continue;
         }
+
+        // TODO: add policy to be able to deal with generated ctor/move/copy
+        if (m->isDefaulted() && !m->isExplicitlyDefaulted())
+            continue;
 
         funcName = m->getNameAsString();
         bool isOperator = m->isOverloadedOperator();
@@ -1064,7 +1141,7 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
         if (const auto conv = llvm::dyn_cast<CXXConversionDecl>(m))
         {
             const auto tn = toDStyle(conv->getConversionType());
-            funcName = "opCast!(";
+            funcName = "opCast(TType:";
             funcName.append(tn);
             funcName.append(")");
             isConversionOp = true;
@@ -1075,8 +1152,8 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
             // get operator name and args
             const auto op = m->getOverloadedOperator();
             const auto psize = m->param_size();
-            const bool isBinary = psize == 2;
-            const bool isUnary = psize == 1;
+            const bool isBinary = psize == 1;
+            const bool isUnary = psize == 0;
 
             if (isBinary)
                 funcName = "opBinary";
@@ -1088,10 +1165,28 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
             switch (op)
             {
             case OverloadedOperatorKind::OO_Plus:
-                setOperatorOp(funcName, "+");
+                setOperatorOp(funcName, "+"); 
                 break;
             case OverloadedOperatorKind::OO_Minus:
                 setOperatorOp(funcName, "-");
+                break;
+            case OverloadedOperatorKind::OO_Star:
+                setOperatorOp(funcName, "*");
+                break;
+            case OverloadedOperatorKind::OO_Slash:
+                setOperatorOp(funcName, "/");
+                break;
+            case OverloadedOperatorKind::OO_Percent:
+                setOperatorOp(funcName, "%");
+                break;
+            case OverloadedOperatorKind::OO_Caret:
+                setOperatorOp(funcName, "^");
+                break;
+            case OverloadedOperatorKind::OO_Amp:
+                setOperatorOp(funcName, "&");
+                break;
+            case OverloadedOperatorKind::OO_Pipe:
+                setOperatorOp(funcName, "|");
                 break;
             case OverloadedOperatorKind::OO_Call:
                 funcName = "op";
@@ -1101,11 +1196,74 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
                 funcName = "op";
                 setOperatorOp(funcName, "Index", false);
                 break;
+            case OverloadedOperatorKind::OO_AmpAmp:
+                funcName = "op_and"; customMangle = true;
+                break;
+            case OverloadedOperatorKind::OO_PipePipe:
+                funcName = "op_or"; customMangle = true;
+                break;
+            case OverloadedOperatorKind::OO_Less:
+                funcName = "op_lt"; customMangle = true;
+                break;
+            case OverloadedOperatorKind::OO_Greater:
+                funcName = "op_gt"; customMangle = true;
+                break;
+            case OverloadedOperatorKind::OO_LessEqual:
+                funcName = "op_le"; customMangle = true;
+                break;
+            case OverloadedOperatorKind::OO_GreaterEqual:
+                funcName = "op_ge"; customMangle = true;
+                break;
+            case OverloadedOperatorKind::OO_Exclaim:
+                funcName = "op_unot"; customMangle = true;
+                break;
+            case OverloadedOperatorKind::OO_ExclaimEqual:
+                funcName = "op_ne"; customMangle = true;
+                break;
+            case OverloadedOperatorKind::OO_PlusEqual:
+                funcName = "opOpAssign"; 
+                setOperatorOp(funcName, "+");
+                break;
+            case OverloadedOperatorKind::OO_MinusEqual:
+                funcName = "opOpAssign"; 
+                setOperatorOp(funcName, "-");
+                break;
+            case OverloadedOperatorKind::OO_StarEqual:
+                funcName = "opOpAssign"; 
+                setOperatorOp(funcName, "*");
+                break;
+            case OverloadedOperatorKind::OO_SlashEqual:
+                funcName = "opOpAssign"; 
+                setOperatorOp(funcName, "/");
+                break;
+            case OverloadedOperatorKind::OO_PipeEqual:
+                funcName = "opOpAssign"; 
+                setOperatorOp(funcName, "|");
+                break;
+            case OverloadedOperatorKind::OO_AmpEqual:
+                funcName = "opOpAssign"; 
+                setOperatorOp(funcName, "&");
+                break;
+            case OverloadedOperatorKind::OO_LessLessEqual:
+                funcName = "opOpAssign"; 
+                setOperatorOp(funcName, "<<");
+                break;
+            case OverloadedOperatorKind::OO_GreaterGreaterEqual:
+                funcName = "opOpAssign"; 
+                setOperatorOp(funcName, ">>");
+                break;
             case OverloadedOperatorKind::OO_Equal:
-                //if (m->getNumParams() == 1 && m->parameters()[0]->getType() == m->getReturnType())
-                //    idAssign = true;
+                if (m->getNumParams() == 1 
+                    && m->getReturnType()->isReferenceType()
+                    && m->parameters()[0]->getType()->getAsRecordDecl() == m->getReturnType()->getAsRecordDecl()
+                ){
+                    idAssign = true;
+                }
                 funcName = "op";
                 setOperatorOp(funcName, "Assign", false);
+                break;
+            case OverloadedOperatorKind::OO_EqualEqual:
+                funcName = "opEquals";
                 break;
             default:
                 setOperatorOp(funcName, getOperatorSpelling(op));
@@ -1113,8 +1271,28 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
             }
         }
 
+        if (customMangle)
+        {
+            // due to many little details unfortunately it's not (yet)
+            if (ast->getLangOpts().isCompatibleWithMSVC(LangOptions::MSVC2015))
+            {
+                out << "@pyExtract(\"" 
+                    <<     decl->getNameAsString() << "::" << m->getNameAsString()
+                    << "\")" << "   pragma(mangle, " << "nsgen."
+                    <<     decl->getNameAsString() << "_" << funcName << ".mangleof)"
+                    << std::endl;
+            }
+            else 
+            {
+                out << "pragma(mangle, \"" << mangledName << "\")" << std::endl;
+            }
+        }
+
+        if (m->isDefaulted())
+            out << "// (default) ";
+
         // default ctor for struct not allowed
-        if (!isClass && isDefaultCtor)
+        if ((!isClass && isDefaultCtor) || idAssign)
         {
             out << "// ";
         }
@@ -1125,6 +1303,10 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
         }
 
         out << getAccessStr(m->getAccess(), !isClass) << " ";
+
+        if (m->hasAttr<OverrideAttr>())
+            out << "override ";
+
         if (isStatic)
             out << "static ";
 
@@ -1146,16 +1328,6 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
         out << "(";
         for (const auto fp : m->parameters())
         {
-            // TODO: detect identity assignment
-            /*
-				if (isOperator && idAssign)
-				{
-					auto parent = m->getParent();
-					if (parent->isClass() || parent->getNumBases() > 0)
-					{
-					}
-				}
-				*/
             // check if is 'type * const'
             if (fp->getType()->isPointerType() && fp->getType().isConstQualified() && !fp->getType()->getPointeeType().isConstQualified())
                 hasConstPtrToNonConst = true;
@@ -1165,6 +1337,12 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
                 out << ", ";
         }
         out << ")";
+
+        if (nogc) 
+            out << " @nogc ";
+
+        if (hasConstPtrToNonConst)
+            out << "/* WINDOWS MANGLING OVERRIDE NOT YET FINISHED, ADJUST MANUALLY! */ ";
         
         // write function body
         if (m->isInlined() && m->hasInlineBody())
@@ -1176,8 +1354,6 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
             {
                 m->getBody()->printPretty(os, nullptr, *ClangParser::g_printPolicy);
                 ss << os.str();
-                if (nogc) 
-                    out << " @nogc ";
                 std::string line;
                 while (std::getline(ss, line))
                 {
@@ -1191,17 +1367,61 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
                 else // something happened, just finish the function decl
                     out << ";";
         }
-        else // this 'else' is needed because we write attributes on the right side of function parameters
+        else
         {
-            if (nogc) 
-                out << " @nogc";
             out << ";" << std::endl;
-            if (hasConstPtrToNonConst)
-                out << " // WINDOWS MANGLING OVERRIDE NOT YET FINISHED, ADJUST MANUALLY!";
         }
     
         out << std::endl;
     }
 
     delete mangleCtx;
+}
+
+
+std::tuple<std::string, std::string> DlangBindGenerator::getFSPathPart(const std::string_view loc)
+{
+    std::string path;
+    std::string lineCol;
+    size_t colPos = std::string_view::npos;
+
+    auto dotPos = loc.find_last_of('.');
+    if (dotPos != std::string_view::npos)
+    {
+        colPos = loc.find_first_of(':', dotPos);
+        if (colPos != std::string_view::npos)
+        {
+            lineCol = loc.substr(colPos);
+            path = loc.substr(0, colPos);
+        }
+    }
+
+    std::error_code _;
+    path = fs::canonical(path, _).string();
+    return std::make_tuple(path, lineCol);
+}
+
+std::tuple<std::string, std::string> DlangBindGenerator::getLineColumnPart(const std::string_view loc)
+{
+    std::string line;
+    std::string col;
+
+    auto colPos = loc.find_first_of(':');
+    if (colPos != std::string_view::npos)
+    {
+        line = loc.substr(0, colPos-1);
+        col = loc.substr(colPos+1);
+    }
+    else
+        line = loc;
+
+    return std::make_tuple(line, col);
+}
+
+std::string DlangBindGenerator::getNextMixinId()
+{
+    std::ostringstream ss;
+    ss << "mxtid" << std::setw(3) << std::setfill('0') << mixinTemplateId;
+    mixinTemplateId += 1;
+    return ss.str();
 }

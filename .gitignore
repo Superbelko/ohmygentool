@@ -1,0 +1,4 @@
+/build
+/include/rapidjson
+tests/**/temp
+tests/**/__pycache__

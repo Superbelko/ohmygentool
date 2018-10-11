@@ -32,7 +32,6 @@ def run():
                 raise ValueError("C++ compilation error")
             try:
                 subprocess.run('../../../build/gentool ../optest.json', **kwargs)
-                pass
             except subprocess.CalledProcessError:
                 raise ValueError("Binding generation failed")
             try:

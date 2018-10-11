@@ -35,7 +35,7 @@ unittest
 	assert(strcmp(cast(char*)&data.str[0], "hello") == 0);
 
 	// this isn't the safest way but for test case should work
-	TestData*[] holder = [new TestData(1.5, -42, 1.5, (cast(byte*)(toStringz("hello")))[0..32])];
+	TestData*[] holder = [new TestData(1.5, -42, 1.5, "hello")];
 	compareNestedPtr(holder.ptr);
 	const(TestData)*[] cholder = cast(const(TestData)*[])holder;
 	nestedConstPtr(cholder.ptr);
@@ -53,9 +53,6 @@ unittest
 	assert(strcmp(cast(char*)&dataRef.str[0], "hello") == 0);
 
 	passByVal(data);
-
-	assert(ofun() == 1.5f);
-	assert(ifun() == 1.5);
 }
 
 
@@ -76,13 +73,4 @@ unittest
 	assert(d.getVal() == 8*2);
 	destroy(d);
 	assert(d.getVal() == 0);
-}
-
-
-unittest
-{
-	auto ns = new Inner();
-	ns.set(42);
-	assert(ns.getVal() == -42);
-	destroy(ns);
 }
