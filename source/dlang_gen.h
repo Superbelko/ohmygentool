@@ -53,13 +53,18 @@
 
 #pragma warning(pop)
 
+// Similar to default printPretty for expressions, except prints D from C++ AST
+void printPrettyD(const clang::Stmt *stmt, llvm::raw_ostream &OS, clang::PrinterHelper *Helper,
+                     const clang::PrintingPolicy &Policy, unsigned Indentation = 0,
+                     const clang::ASTContext *Context = nullptr);
+
 
 
 struct DlangBindGenerator : public gentool::IAbstractGenerator
 {
 protected:
 	std::ofstream fileOut;
-	OutStreamHelper out = OutStreamHelper(&std::cout, &fileOut);
+	OutStreamHelper out = OutStreamHelper(nullptr/*&std::cout*/, &fileOut);
 	std::string classOrStructName;
 	std::string finalTypeName;
 	std::list<const clang::RecordDecl*> declStack; // for nesting structs or enums
@@ -75,6 +80,7 @@ protected:
 	bool isPrevIsBitfield = false; // was last field is a bitfield? (needed to split up and pad)
     bool cppIsDefault = true;
     bool nogc = false;
+    bool oldNamespaces = false;
 
 	gentool::InputOptions const* iops;
 
@@ -101,12 +107,12 @@ private:
     static std::string _wrapParens(clang::QualType type);
     static void _typeRoll(clang::QualType type, std::vector<std::string>& parts);
     static std::string _toDBuiltInType(clang::QualType type);
-
+public:
     static std::string toDStyle(clang::QualType type);
     static std::string sanitizedIdentifier(const std::string& id);
     static std::string getAccessStr(clang::AccessSpecifier ac, bool isStruct = false);
     static void setOperatorOp(std::string& str, const char* action, bool templated = true);
-
+private:
     // returns "C" or "C++" depending on settings
     std::string externAsString(bool isExternC = false) const;
     void getJoinedNS(const clang::DeclContext* decl, std::vector<std::string>& parts);

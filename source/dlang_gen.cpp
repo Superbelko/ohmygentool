@@ -3,6 +3,7 @@
 
 #include <sstream>
 #include <iomanip>
+#include <memory>
 
 #include "llvm/ADT/ArrayRef.h"
 #include "clang/AST/AST.h"
@@ -11,6 +12,8 @@
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/Mangle.h"
+#include "clang/AST/Expr.h"
+#include "clang/AST/Stmt.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/ASTMatchers/ASTMatchers.h"
 #include "clang/ASTMatchers/ASTMatchersMacros.h"
@@ -53,6 +56,7 @@ const char* MODULE_HEADER =
 R"(
 import core.stdc.config;
 import std.bitmanip : bitfields;
+import std.conv : emplace;
 
 bool isModuleAvailable(alias T)() {
     mixin("import " ~ T ~ ";");
@@ -172,6 +176,7 @@ void textReplaceArrowColon(std::string& in)
 }
 
 
+
 bool DlangBindGenerator::isRelevantPath(const std::string_view path)
 {
     if (path.compare("<invalid loc>") == 0) 
@@ -259,6 +264,17 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
     // linkage & namespace
     if (!hasNamespace)
         out << "extern(" << externAsString(decl->getDeclContext()->isExternCContext()) << ")" << std::endl;
+    else if (!oldNamespaces)
+    {
+        out << "extern(" << externAsString(decl->getDeclContext()->isExternCContext()) << ", ";
+        auto it = std::rbegin(nestedNS);
+        while (it != nestedNS.rend())
+        {
+            out << "\"" << *it << "\""; if (it != (nestedNS.rend() - 1)) out << ",";
+            it++;
+        }
+        out << ")" << std::endl;
+    }
     else
     {
         mixinId = getNextMixinId();
@@ -321,10 +337,6 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
         deanonimizeTypedef(const_cast<RecordDecl*>(decl));
     }
 
-
-    if (classOrStructName == "rcScopedDelete")
-        int x = 0;
-
     out << classOrStructName;
     if (cxxdecl)
     {
@@ -341,6 +353,11 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
                     out << "(";
                     for(const auto tp : *tparams)
                     {
+                        if (isa<NonTypeTemplateParmDecl>(tp))
+                        {
+                            auto nt = cast<NonTypeTemplateParmDecl>(tp);
+                            out << toDStyle(nt->getType()) << " ";
+                        }
                         out << tp->getName().str();
                         if (tp != *(tparams->end()-1))
                             out << ", ";
@@ -369,7 +386,7 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
     }
     out << "}" << std::endl;
 
-    if (hasNamespace)
+    if (hasNamespace && oldNamespaces)
     {
         out << "`);" << std::endl;
         out.iless(4); // indent out from mixin
@@ -446,6 +463,17 @@ void DlangBindGenerator::onFunction(const clang::FunctionDecl *decl)
     // linkage & namespace
     if (!hasNamespace)
         out << "extern(" << externAsString(fn->isExternC()) << ")" << std::endl;
+    else if (!oldNamespaces)
+    {
+        out << "extern(" << externAsString(decl->getDeclContext()->isExternCContext()) << ", ";
+        auto it = std::rbegin(nestedNS);
+        while (it != nestedNS.rend())
+        {
+            out << "\"" << *it << "\""; if (it != (nestedNS.rend() - 1)) out << ",";
+            it++;
+        }
+        out << ")" << std::endl;
+    }
     else
     {
         mixinId = getNextMixinId();
@@ -474,16 +502,18 @@ void DlangBindGenerator::onFunction(const clang::FunctionDecl *decl)
     if (fn->isTemplated())
     {
         // note that we write to already opened parenthesis
-        const auto ftd = fn->getDescribedTemplate();
-        const auto tplist = ftd->getTemplateParameters();
-        for (const auto tp : *tplist)
+        if (const auto ftd = fn->getDescribedTemplate())
         {
-            out << tp->getName().str();
-            if (tp != *(tplist->end() - 1))
-                out << ", ";
+            const auto tplist = ftd->getTemplateParameters();
+            for (const auto tp : *tplist)
+            {
+                out << tp->getName().str();
+                if (tp != *(tplist->end() - 1))
+                    out << ", ";
+            }
+            // close template params list and open runtime args
+            out << ")(";
         }
-        // close template params list and open runtime args
-        out << ")(";
     }
 
     // argument list
@@ -499,7 +529,8 @@ void DlangBindGenerator::onFunction(const clang::FunctionDecl *decl)
         {
             std::string s;
             llvm::raw_string_ostream os(s);
-            defaultVal->printPretty(os, nullptr, *ClangParser::g_printPolicy);
+            //defaultVal->printPretty(os, nullptr, *ClangParser::g_printPolicy);
+            printPrettyD(defaultVal, os, nullptr, *ClangParser::g_printPolicy);
             out << " = " << os.str();
         }
     }
@@ -508,7 +539,7 @@ void DlangBindGenerator::onFunction(const clang::FunctionDecl *decl)
         out << " @nogc";
     out << ";" << std::endl;
 
-    if (hasNamespace)
+    if (hasNamespace && oldNamespaces)
     {
         out << "`);" << std::endl;
         out.iless(4); // indent out from mixin
@@ -581,7 +612,8 @@ void DlangBindGenerator::onGlobalVar(const clang::VarDecl *decl)
     {
         std::string s;
         llvm::raw_string_ostream os(s);
-        init->printPretty(os, nullptr, *ClangParser::g_printPolicy);
+        //init->printPretty(os, nullptr, *ClangParser::g_printPolicy);
+        printPrettyD(init, os, nullptr, *ClangParser::g_printPolicy);
         out << " = ";
         if (decl->getType()->isFloatingType())
             out << _adjustVarInit(os.str());
@@ -596,6 +628,9 @@ void DlangBindGenerator::onGlobalVar(const clang::VarDecl *decl)
 // adjust initializer for D, for example 50.F -> 50.0f
 std::string DlangBindGenerator::_adjustVarInit(const std::string &e)
 {
+    if (e.length()==0)
+      return e;
+
     std::string res = e;
     if (e.rfind(".F") != std::string::npos)
     {
@@ -963,7 +998,8 @@ void DlangBindGenerator::fieldIterate(const clang::RecordDecl *decl)
             }
             std::string s;
             llvm::raw_string_ostream os(s);
-            it->getBitWidth()->printPretty(os, nullptr, *ClangParser::g_printPolicy);
+            //it->getBitWidth()->printPretty(os, nullptr, *ClangParser::g_printPolicy);
+            printPrettyD(it->getBitWidth(), os, nullptr, *ClangParser::g_printPolicy);
             bitwidthExpr = os.str();
             bitwidth = it->getBitWidthValue(decl->getASTContext());
             accumBitFieldWidth += bitwidth;
@@ -1077,7 +1113,11 @@ void DlangBindGenerator::setOperatorOp(std::string &str, const char *action, boo
 void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
 {
     clang::ASTContext *ast = &decl->getASTContext();
-    const auto mangleCtx = clang::MicrosoftMangleContext::create(*ast, ast->getDiagnostics());
+    std::unique_ptr<MangleContext> mangleCtx;
+    if (ast->getTargetInfo().getTargetOpts().Triple.compare("windows") != std::string::npos)
+        mangleCtx.reset(clang::MicrosoftMangleContext::create(*ast, ast->getDiagnostics()));
+    else
+        mangleCtx.reset(clang::ItaniumMangleContext::create(*ast, ast->getDiagnostics()));
 
     for (const auto m : decl->methods())
     {
@@ -1274,7 +1314,7 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
 
         if (customMangle)
         {
-            // due to many little details unfortunately it's not (yet)
+            // due to many little details unfortunately it's not there (yet)
             if (ast->getLangOpts().isCompatibleWithMSVC(LangOptions::MSVC2015))
             {
                 out << "@pyExtract(\"" 
@@ -1353,7 +1393,8 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
             std::stringstream ss;
             if (m->getBody())
             {
-                m->getBody()->printPretty(os, nullptr, *ClangParser::g_printPolicy);
+                //m->getBody()->printPretty(os, nullptr, *ClangParser::g_printPolicy);
+                printPrettyD(m->getBody(), os, nullptr, *ClangParser::g_printPolicy);
                 ss << os.str();
                 std::string line;
                 while (std::getline(ss, line))
@@ -1375,8 +1416,6 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
     
         out << std::endl;
     }
-
-    delete mangleCtx;
 }
 
 

@@ -21,7 +21,7 @@ struct Arr3
 {
     T a,b,c;
     // truncate our "list"
-    operator Arr2<T>() { return Arr2(a,b); }
+    operator Arr2<T>() { return Arr2<T>(a,b); }
 };
 
 
