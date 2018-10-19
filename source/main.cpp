@@ -59,6 +59,7 @@
 #include "gentool/abstract_generator.h"
 #include "gentool/options.h"
 #include "clangparser.h"
+#include "ppcallbacks.h"
 #include "iohelpers.h"
 #include "dlang_gen.h"
 
@@ -333,7 +334,55 @@ void llvmOnError(void *user_data, const std::string& reason, bool gen_crash_diag
 	std::cout << reason << std::endl;
 }
 
+// Frontend action stuff:
+
+namespace
+{
+// Consumer is responsible for setting up the callbacks.
+class PPCallbackConsumer : public ASTConsumer
+{
+public:
+	PPCallbackConsumer(Preprocessor &PP, DlangBindGenerator* Listener)
+	{
+		// PP takes ownership.
+		PP.addPPCallbacks(llvm::make_unique<PPCallbacksTracker>(PP, Listener));
+	}
+};
+
+class PPCallbackAction : public SyntaxOnlyAction
+{
+public:
+	PPCallbackAction(DlangBindGenerator* Listener) : Listener(Listener) {}
+
+protected:
+	std::unique_ptr<clang::ASTConsumer>
+	CreateASTConsumer(CompilerInstance &CI, StringRef InFile) override
+	{
+		Listener->setSourceManager(&CI.getSourceManager());
+		return llvm::make_unique<PPCallbackConsumer>(CI.getPreprocessor(), Listener);
+	}
+private:
+	DlangBindGenerator* Listener;
+};
+
+class PPCallbacksFrontendActionFactory : public FrontendActionFactory
+{
+public:
+	PPCallbacksFrontendActionFactory(DlangBindGenerator* Listener) : Listener(Listener) {}
+
+	PPCallbackAction *create() override
+	{
+		return new PPCallbackAction(Listener);
+	}
+private:
+	DlangBindGenerator* Listener;
+};
+
+} // namespace
+
 static llvm::cl::OptionCategory MyToolCategory("My tool options");
+
+
 
 int main(int argc, const char **argv) 
 {
@@ -523,7 +572,11 @@ int main(int argc, const char **argv)
 
 	int toolres = 0;
 #endif
-	
+
+	// Run preprocessor callbacks pass before normal pass
+	PPCallbacksFrontendActionFactory Factory(&allRecords.getImpl());
+	tool.run(&Factory);
+
 	auto toolres = tool.run(newFrontendActionFactory(&Finder).get());
 
 	allRecords.getImpl().finalize();

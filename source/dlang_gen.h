@@ -63,6 +63,7 @@ void printPrettyD(const clang::Stmt *stmt, llvm::raw_ostream &OS, clang::Printer
 struct DlangBindGenerator : public gentool::IAbstractGenerator
 {
 protected:
+    clang::SourceManager* SourceMgr;
 	std::ofstream fileOut;
 	OutStreamHelper out = OutStreamHelper(nullptr/*&std::cout*/, &fileOut);
 	std::string classOrStructName;
@@ -74,6 +75,8 @@ protected:
 	FunctionDecls functionDecls;
 	using EnumDecls = std::unordered_map<std::string, const clang::EnumDecl*>;
 	EnumDecls enumDecls;
+    using MacroDefs = std::unordered_map<std::string, bool>;
+    MacroDefs macroDefs;
     int globalAnonTypeId = 0; // used to deanonimize at global scope
 	int accumBitFieldWidth = 0; // accumulated width in bits, we need to round up to byte, short, int or long and split when necessary
     int mixinTemplateId = 0; // used to write unique id's for namespace hack
@@ -97,6 +100,10 @@ public:
     virtual void onFunction(const clang::FunctionDecl* decl) override;
     virtual void onTypedef(const clang::TypedefDecl* decl) override;
     virtual void onGlobalVar(const clang::VarDecl* decl) override;
+
+    // On define macro event
+    void onMacroDefine(const clang::Token* name, const clang::MacroDirective* macro);
+    void setSourceManager(clang::SourceManager* SM) { this->SourceMgr = SM; }
 
     // Get file path and line & column parts (if any) from source location
     static std::tuple<std::string, std::string> getFSPathPart(const std::string_view loc);

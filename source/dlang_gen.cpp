@@ -179,7 +179,7 @@ void textReplaceArrowColon(std::string& in)
 
 bool DlangBindGenerator::isRelevantPath(const std::string_view path)
 {
-    if (path.compare("<invalid loc>") == 0) 
+    if (path.size() == 0 || path.compare("<invalid loc>") == 0) 
         return false;
 
     auto [fullPath, _] = getFSPathPart(path);
@@ -199,7 +199,7 @@ void DlangBindGenerator::setOptions(const InputOptions *inOpt, const OutputOptio
     if (inOpt)
     {
         iops = inOpt;
-        cppIsDefault = inOpt->standard.compare("c++") != std::string::npos;
+        cppIsDefault = inOpt->standard.rfind("c++") != std::string::npos;
     }
     if (outOpt)
     {
@@ -225,6 +225,90 @@ void DlangBindGenerator::finalize()
 {
 }
 
+void DlangBindGenerator::onMacroDefine(const clang::Token* name, const clang::MacroDirective* macro)
+{
+    static const int LARGE_MACRO_NUM_TOKENS = 50;
+
+    if (!macro)
+        return;
+
+    auto path = macro->getLocation().printToString(*SourceMgr);
+    if (!isRelevantPath(path))
+        return;
+
+    if (auto mi = macro->getMacroInfo())
+    {
+        if (mi->isUsedForHeaderGuard() || mi->getNumTokens() == 0)
+            return;
+        
+        if (!name || !name->getIdentifierInfo())
+            return;
+
+        auto id = name->getIdentifierInfo()->getName();
+        if ( macroDefs.find(id.str()) != macroDefs.end() )
+            return;
+        else macroDefs.insert(std::make_pair(id.str(), true));
+
+        bool prevHash = false; // is the last token was a '#'
+        // this measure disallows macros that possibly expands into hundreds of lines
+        // it is not accurate in any way, but there is no better way to detect such cases
+        if (mi->getNumTokens() == 1)
+        {
+            // Write commented out macro body if this it is function-like
+            if (mi->getNumParams())
+                out << "/*" << std::endl;
+            out << "enum " << name->getIdentifierInfo()->getName().str();
+            if (mi->getNumParams())
+                out << "(";
+            for (auto p : mi->params())
+            {
+                out << p->getName().str();
+                if (p != *(mi->param_end()-1)) out << ", ";
+            }
+            if (mi->getNumParams())
+                out << ")" << std::endl;
+            out << " = ";
+
+            auto tok = mi->getReplacementToken(0);
+            //for (auto tok : mi->tokens())
+            {
+                if (tok.isAnyIdentifier())
+                {
+                    out << tok.getIdentifierInfo()->getName().str() << " "; 
+                }
+                else if (tok.isLiteral())
+                {
+                    out << std::string_view(tok.getLiteralData(), tok.getLength()) << " "; 
+                }
+                else if (auto kw = clang::tok::getKeywordSpelling(tok.getKind()))
+                {
+                    out << kw << " ";
+                }
+                else if (auto pu = clang::tok::getPunctuatorSpelling(tok.getKind()))
+                { 
+                    static const std::vector<clang::tok::TokenKind> wstokens = { // tokens that needs ws after it
+                        clang::tok::comma, clang::tok::r_paren, clang::tok::r_brace, clang::tok::semi
+                    };
+                    bool ws = std::find(wstokens.begin(), wstokens.end(), tok.getKind()) != wstokens.end();
+                    out << pu;
+                    if (ws) out << " ";
+                }
+                prevHash = tok.getKind() == clang::tok::hash;
+            }
+            out << ";";
+            // Close commented out function-like macro
+            if (mi->getNumParams())
+                out << std::endl << "*/";
+            out << std::endl;
+        }
+        else // 'long' macro
+        {
+            out << "//" << path << std::endl;
+            out << "//#define " << name->getIdentifierInfo()->getName().str()
+                << " ..." << std::endl;
+        }
+    }
+}
 
 void DlangBindGenerator::onBeginFile(const std::string_view file)
 {
@@ -793,7 +877,7 @@ std::string DlangBindGenerator::toDStyle(QualType type)
         os << ")";
         res = os.str();
     }
-    else if (type->isStructureOrClassType() || type->isEnumeralType()) // special case for stripping enum|class|struct keyword
+    else if (type->isStructureOrClassType() || type->isEnumeralType() || type->isUnionType()) // special case for stripping enum|class|struct keyword
     {
         // split on whitespace in between "class SomeClass*" and take the part on the right
         auto str = type.getAsString(*ClangParser::g_printPolicy);
