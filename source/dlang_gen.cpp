@@ -27,7 +27,6 @@
 #include "clang/CodeGen/CodeGenAction.h"
 #include "clang/Lex/PreprocessorOptions.h"
 
-#include "clangparser.h"
 #include "iohelpers.h"
 
 #if __cpp_lib_filesystem
@@ -43,6 +42,8 @@ using namespace clang::driver;
 using namespace clang::tooling;
 using namespace gentool;
 
+
+thread_local clang::PrintingPolicy *DlangBindGenerator::g_printPolicy;
 
 // D reserved keywords, possible overlaps from C/C++ sources
 std::vector<std::string> reservedIdentifiers = {
@@ -613,8 +614,8 @@ void DlangBindGenerator::onFunction(const clang::FunctionDecl *decl)
         {
             std::string s;
             llvm::raw_string_ostream os(s);
-            //defaultVal->printPretty(os, nullptr, *ClangParser::g_printPolicy);
-            printPrettyD(defaultVal, os, nullptr, *ClangParser::g_printPolicy);
+            //defaultVal->printPretty(os, nullptr, *DlangBindGenerator::g_printPolicy);
+            printPrettyD(defaultVal, os, nullptr, *DlangBindGenerator::g_printPolicy);
             out << " = " << os.str();
         }
     }
@@ -696,8 +697,8 @@ void DlangBindGenerator::onGlobalVar(const clang::VarDecl *decl)
     {
         std::string s;
         llvm::raw_string_ostream os(s);
-        //init->printPretty(os, nullptr, *ClangParser::g_printPolicy);
-        printPrettyD(init, os, nullptr, *ClangParser::g_printPolicy);
+        //init->printPretty(os, nullptr, *DlangBindGenerator::g_printPolicy);
+        printPrettyD(init, os, nullptr, *DlangBindGenerator::g_printPolicy);
         out << " = ";
         if (decl->getType()->isFloatingType())
             out << _adjustVarInit(os.str());
@@ -861,7 +862,7 @@ std::string DlangBindGenerator::toDStyle(QualType type)
     {
         std::string s;
         llvm::raw_string_ostream os(s);
-        tsp->getTemplateName().print(os, *ClangParser::g_printPolicy);
+        tsp->getTemplateName().print(os, *DlangBindGenerator::g_printPolicy);
         os << "!"
            << "(";
         //s.clear();
@@ -871,7 +872,7 @@ std::string DlangBindGenerator::toDStyle(QualType type)
         {
             if (i > 0 && i < numArgs)
                 os << ", ";
-            arg.print(*ClangParser::g_printPolicy, os);
+            arg.print(*DlangBindGenerator::g_printPolicy, os);
             i += 1;
         }
         os << ")";
@@ -880,7 +881,7 @@ std::string DlangBindGenerator::toDStyle(QualType type)
     else if (type->isStructureOrClassType() || type->isEnumeralType() || type->isUnionType()) // special case for stripping enum|class|struct keyword
     {
         // split on whitespace in between "class SomeClass*" and take the part on the right
-        auto str = type.getAsString(*ClangParser::g_printPolicy);
+        auto str = type.getAsString(*DlangBindGenerator::g_printPolicy);
         auto ws = str.find_first_of(' ', 0);
         if (ws != std::string::npos)
         {
@@ -913,7 +914,7 @@ std::string DlangBindGenerator::toDStyle(QualType type)
     }
     else
     {
-        res = type.getAsString(*ClangParser::g_printPolicy);
+        res = type.getAsString(*DlangBindGenerator::g_printPolicy);
     }
 
     while (true)
@@ -955,7 +956,7 @@ std::string DlangBindGenerator::_toDBuiltInType(QualType type)
     case TY::LongLong:
         return "long";
     default:
-        return type.getAsString(*ClangParser::g_printPolicy);
+        return type.getAsString(*DlangBindGenerator::g_printPolicy);
     }
     assert(bt != nullptr && "clang::BuiltinType expected");
 }
@@ -1082,8 +1083,8 @@ void DlangBindGenerator::fieldIterate(const clang::RecordDecl *decl)
             }
             std::string s;
             llvm::raw_string_ostream os(s);
-            //it->getBitWidth()->printPretty(os, nullptr, *ClangParser::g_printPolicy);
-            printPrettyD(it->getBitWidth(), os, nullptr, *ClangParser::g_printPolicy);
+            //it->getBitWidth()->printPretty(os, nullptr, *DlangBindGenerator::g_printPolicy);
+            printPrettyD(it->getBitWidth(), os, nullptr, *DlangBindGenerator::g_printPolicy);
             bitwidthExpr = os.str();
             bitwidth = it->getBitWidthValue(decl->getASTContext());
             accumBitFieldWidth += bitwidth;
@@ -1477,8 +1478,8 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
             std::stringstream ss;
             if (m->getBody())
             {
-                //m->getBody()->printPretty(os, nullptr, *ClangParser::g_printPolicy);
-                printPrettyD(m->getBody(), os, nullptr, *ClangParser::g_printPolicy);
+                //m->getBody()->printPretty(os, nullptr, *DlangBindGenerator::g_printPolicy);
+                printPrettyD(m->getBody(), os, nullptr, *DlangBindGenerator::g_printPolicy);
                 ss << os.str();
                 std::string line;
                 while (std::getline(ss, line))

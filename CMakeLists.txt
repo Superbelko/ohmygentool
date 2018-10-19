@@ -30,7 +30,13 @@ check_cxx_source_compiles(
 )
 
 # Now build our tools
-add_executable(gentool source/main.cpp source/clangparser.cpp source/dlang_gen.cpp source/iohelpers.cpp)
+add_executable(gentool 
+    source/main.cpp 
+    source/ppcallbacks.cpp 
+    source/dlang_gen.cpp 
+    source/printprettyd.cpp 
+    source/iohelpers.cpp
+)
 
 # Find the libraries that correspond to the LLVM components
 # that we wish to use

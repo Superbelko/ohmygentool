@@ -59,9 +59,10 @@ void printPrettyD(const clang::Stmt *stmt, llvm::raw_ostream &OS, clang::Printer
                      const clang::ASTContext *Context = nullptr);
 
 
-
 struct DlangBindGenerator : public gentool::IAbstractGenerator
 {
+public:
+    static thread_local clang::PrintingPolicy* g_printPolicy;
 protected:
     clang::SourceManager* SourceMgr;
 	std::ofstream fileOut;

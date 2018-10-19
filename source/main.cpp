@@ -58,7 +58,6 @@
 
 #include "gentool/abstract_generator.h"
 #include "gentool/options.h"
-#include "clangparser.h"
 #include "ppcallbacks.h"
 #include "iohelpers.h"
 #include "dlang_gen.h"
@@ -452,20 +451,16 @@ int main(int argc, const char **argv)
 		//langOptions.MSBitfields = 1;
 		langOptions.DeclSpecKeyword = 1;
 		langOptions.DelayedTemplateParsing = 1; // MSVC parses templates at the time of actual use
-		//m_CompilerInstance.getDiagnosticOpts().setFormat(clang::TextDiagnosticFormat::MSVC);
-		//m_CompilerInstance.getTargetOpts().ABI = "microsoft";
 		//#endif
-		ClangParser::g_langOptions = &langOptions;
 		
-		if (ClangParser::g_printPolicy)
-			delete ClangParser::g_printPolicy;
-		ClangParser::g_printPolicy = new PrintingPolicy(langOptions);
-		ClangParser::g_printPolicy->SuppressScope = true;
-		ClangParser::g_printPolicy->Bool = true;
-		ClangParser::g_printPolicy->SuppressTagKeyword = true;
-		ClangParser::g_printPolicy->ConstantsAsWritten = true;   // prevent prettifying masks and other unpleasent things
-		ClangParser::g_printPolicy->SuppressImplicitBase = true; // no "this->",  please
-		//g_printPolicy->Indentation = 2;
+		if (DlangBindGenerator::g_printPolicy)
+			delete DlangBindGenerator::g_printPolicy;
+		DlangBindGenerator::g_printPolicy = new PrintingPolicy(langOptions);
+		DlangBindGenerator::g_printPolicy->SuppressScope = true;
+		DlangBindGenerator::g_printPolicy->Bool = true;
+		DlangBindGenerator::g_printPolicy->SuppressTagKeyword = true;
+		DlangBindGenerator::g_printPolicy->ConstantsAsWritten = true;   // prevent prettifying masks and other unpleasent things
+		DlangBindGenerator::g_printPolicy->SuppressImplicitBase = true; // no "this->",  please
 	}
 
 	std::vector<std::string> sources;
@@ -530,48 +525,8 @@ int main(int argc, const char **argv)
 	CommonOptionsParser op(argn, ptrList.data(), MyToolCategory); // feed in argc, argv, kind of
 	ClangTool tool(op.getCompilations(), op.getSourcePathList());
 
-
 	allRecords.getImpl().setOptions(&input, &output);
 	allRecords.getImpl().prepare();
-
-#ifdef CUSTOM_PARSER_SETUP
-	auto parseFn = [&Finder, &allRecords, &input, &output](const std::string& fpath, const std::string& base) {
-		ClangParser parser(&input, &output);
-#ifdef _MSC_VER
-		auto relPathStr = diffPathPart(fpath, base);
-#else
-		auto basePath = fs::path(base);
-		auto thisPath = fs::path(fpath);
-		auto relPathStr = fs::relative(thisPath, basePath).generic_string();
-#endif
-
-		allRecords.getImpl().onBeginFile(relPathStr);
-		parser.parseAST(fpath.c_str() , &Finder);
-		allRecords.getImpl().onEndFile(relPathStr);
-	};
-
-	std::error_code _unused;
-	for (const auto& p : input.paths)
-	{
-		if (fs::is_directory(p))
-		for (auto& it : fs::recursive_directory_iterator(fs::canonical(p, _unused)))
-		{
-			if (fs::is_directory(it))
-				continue;
-
-			if ( !it.path().has_extension() )
-				continue;
-			
-			if ( !filterExt(it.path().extension().string()) )
-				continue;
-
-			parseFn(it.path().string(), p);
-		}
-		else parseFn(p, p);
-	}
-
-	int toolres = 0;
-#endif
 
 	// Run preprocessor callbacks pass before normal pass
 	PPCallbacksFrontendActionFactory Factory(&allRecords.getImpl());
