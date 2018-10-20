@@ -1064,14 +1064,16 @@ void DlangBindGenerator::fieldIterate(const clang::RecordDecl *decl)
 
         RecordDecl *rec = it->getType()->getAsRecordDecl();
 
+        bool isDependent = it->getType()->isDependentType();
         bool isForwardDecl = true;
         if (rec)
             isForwardDecl = rec->getDefinition() == nullptr;
 
         TypeInfo finfo;
+        if (!isDependent)
         if (!isForwardDecl || it->getType()->isBuiltinType() || it->getType()->isPointerType() || it->getType()->isArrayType())
         {
-            finfo = it->getASTContext().getTypeInfo(it->getType());
+            finfo = it->getASTContext().getTypeInfo(it->getType()); 
         }
 
         bool bitfield = it->isBitField();

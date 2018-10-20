@@ -38,6 +38,33 @@ using namespace clang::tooling;
 namespace
 {
 
+// Looks for 'this' or '*this', when found aborts traversing
+class HasCXXThisVisitor : public RecursiveASTVisitor<HasCXXThisVisitor>
+{
+public:
+    CXXThisExpr* thisFound;
+
+    bool VisitUnaryOperator(UnaryOperator* Op)
+    {
+        if (Op->getOpcode() == UnaryOperator::Opcode::UO_Deref)
+        {
+            auto expr = Op->getSubExpr();
+            if (expr && isa<CXXThisExpr>(expr))
+            {
+                thisFound = cast<CXXThisExpr>(expr);
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool VisitCXXThisExpr(CXXThisExpr* This)
+    {
+        thisFound = This;
+        return false;
+    }
+};
+
 // NOTE: This class may contain code snippets from clang sources,
 //  this may or may not impose some legal issues, but be careful.
 class CppDASTPrinterVisitor : public RecursiveASTVisitor<CppDASTPrinterVisitor>
@@ -370,9 +397,10 @@ public:
 
     bool VisitMemberExpr(MemberExpr *Node)
     {
+        bool thisBase = (Node->getBase() && Node->getBase()->getStmtClass() == Stmt::CXXThisExprClass);
         if (!Policy.SuppressImplicitBase || !isImplicitThis(Node->getBase()))
         {
-            VisitExpr(Node->getBase());
+            TraverseStmt(Node->getBase());
 
             auto *ParentMember = dyn_cast<MemberExpr>(Node->getBase());
             FieldDecl *ParentDecl =
@@ -385,7 +413,7 @@ public:
 
         if (auto *FD = dyn_cast<FieldDecl>(Node->getMemberDecl()))
             if (FD->isAnonymousStructOrUnion())
-                return true;
+                return !thisBase;
 
         if (NestedNameSpecifier *Qualifier = Node->getQualifier())
             Qualifier->print(OS, Policy);
@@ -397,7 +425,7 @@ public:
         //if (Node->hasExplicitTemplateArgs())
         //    printTemplateArgumentList(OS, Node->template_arguments(), Policy);
 
-        return true;
+        return !thisBase;
     }
 
     bool VisitParenExpr(ParenExpr *Node) 
@@ -539,13 +567,22 @@ public:
 
     bool VisitUnaryExprOrTypeTraitExpr(UnaryExprOrTypeTraitExpr *Node)
     {
+        bool typeofThis = false;
         if (Node->isArgumentType()) {
             OS << '(';
             OS << DlangBindGenerator::toDStyle(Node->getArgumentType());
             OS << ')';
         } else {
             OS << " ";
-            TraverseStmt(Node->getArgumentExpr());
+            HasCXXThisVisitor finder;
+            finder.TraverseStmt(Node->getArgumentExpr());
+            if (!finder.thisFound)
+                TraverseStmt(Node->getArgumentExpr());
+            else
+            {
+                typeofThis = true;
+                OS << "typeof(this)";
+            }
         }
 
         switch(Node->getKind()) {
@@ -557,7 +594,7 @@ public:
             break;
         }
         
-        return true;
+        return !typeofThis;
     }
 
     bool VisitCXXNewExpr(CXXNewExpr *E)
