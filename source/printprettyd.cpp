@@ -42,7 +42,7 @@ namespace
 class HasCXXThisVisitor : public RecursiveASTVisitor<HasCXXThisVisitor>
 {
 public:
-    CXXThisExpr* thisFound;
+    CXXThisExpr* thisFound = nullptr;
 
     bool VisitUnaryOperator(UnaryOperator* Op)
     {
@@ -61,6 +61,19 @@ public:
     bool VisitCXXThisExpr(CXXThisExpr* This)
     {
         thisFound = This;
+        return false;
+    }
+};
+
+
+class HasCXXTemporaryObjectExpr : public RecursiveASTVisitor<HasCXXTemporaryObjectExpr>
+{
+public:
+    CXXTemporaryObjectExpr* found = nullptr;
+
+    bool VisitCXXTemporaryObjectExpr(CXXTemporaryObjectExpr *E)
+    {
+        found = E;
         return false;
     }
 };
@@ -368,8 +381,10 @@ public:
 
     bool VisitCXXConstructExpr(CXXConstructExpr *E)
     {
+        OS << DlangBindGenerator::toDStyle(E->getType());
+
         if (E->isListInitialization() && !E->isStdInitListInitialization())
-            OS << "{";
+            OS << "(";
 
         for (unsigned i = 0, e = E->getNumArgs(); i != e; ++i)
         {
@@ -385,7 +400,7 @@ public:
         }
 
         if (E->isListInitialization() && !E->isStdInitListInitialization())
-            OS << "}";
+            OS << ")";
         return false;
     }
 
@@ -425,7 +440,7 @@ public:
         //if (Node->hasExplicitTemplateArgs())
         //    printTemplateArgumentList(OS, Node->template_arguments(), Policy);
 
-        return !thisBase;
+        return false;
     }
 
     bool VisitParenExpr(ParenExpr *Node) 
@@ -669,7 +684,14 @@ public:
 
     bool VisitMaterializeTemporaryExpr(MaterializeTemporaryExpr *Node)
     {
-        TraverseStmt(Node->GetTemporaryExpr());
+        HasCXXTemporaryObjectExpr tempObjFinder;
+        tempObjFinder.TraverseStmt(Node->GetTemporaryExpr());
+        if (tempObjFinder.found)
+        {
+            VisitCXXTemporaryObjectExpr(tempObjFinder.found);
+            return false;
+        }
+        else TraverseStmt(Node->GetTemporaryExpr());
         return true;
     }
 
@@ -731,7 +753,7 @@ public:
             OS << "}";
         else
             OS << ")";
-        return true;
+        return false;
     }
 
     bool VisitConditionalOperator(ConditionalOperator *Node) 
