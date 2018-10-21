@@ -250,12 +250,14 @@ void DlangBindGenerator::onMacroDefine(const clang::Token* name, const clang::Ma
             return;
         else macroDefs.insert(std::make_pair(id.str(), true));
 
+        // indicates that macro probably a simple value staring with minus
+        bool tokWithMinus = mi->getNumTokens() == 2 && mi->getReplacementToken(0).getKind() == clang::tok::minus;
         bool prevHash = false; // is the last token was a '#'
         // this measure disallows macros that possibly expands into hundreds of lines
         // it is not accurate in any way, but there is no better way to detect such cases
-        if (mi->getNumTokens() == 1)
+        if (mi->getNumTokens() == 1 || tokWithMinus)
         {
-            // Write commented out macro body if this it is function-like
+            // Write commented out macro body if it is function-like
             if (mi->getNumParams())
                 out << "/*" << std::endl;
             out << "enum " << name->getIdentifierInfo()->getName().str();
@@ -270,8 +272,7 @@ void DlangBindGenerator::onMacroDefine(const clang::Token* name, const clang::Ma
                 out << ")" << std::endl;
             out << " = ";
 
-            auto tok = mi->getReplacementToken(0);
-            //for (auto tok : mi->tokens())
+            for (auto tok : mi->tokens())
             {
                 if (tok.isAnyIdentifier())
                 {
@@ -1419,8 +1420,9 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
         if (m->isDefaulted())
             out << "// (default) ";
 
+        bool commentOut = (!isClass && isDefaultCtor) || idAssign;
         // default ctor for struct not allowed
-        if ((!isClass && isDefaultCtor) || idAssign)
+        if (commentOut)
         {
             out << "// ";
         }
@@ -1484,8 +1486,10 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
                 printPrettyD(m->getBody(), os, nullptr, *DlangBindGenerator::g_printPolicy);
                 ss << os.str();
                 std::string line;
-                while (std::getline(ss, line))
+                for (int i = 0; std::getline(ss, line); i++)
                 {
+                    if (i && commentOut) 
+                        out << "//";
                     textReplaceArrowColon(line);
                     out << line << std::endl;
                 }

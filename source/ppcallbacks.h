@@ -21,7 +21,7 @@ private:
 
 	~PPCallbacksTracker() override {}
 
-	bool skipPath(llvm::StringRef& path);
+	bool skipPath(llvm::StringRef path);
 
 	void dumpMacroText(const clang::MacroDirective *MacroDirective);
 

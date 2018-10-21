@@ -8,7 +8,7 @@
 #include "dlang_gen.h"
 
 
-bool PPCallbacksTracker::skipPath(llvm::StringRef &path)
+bool PPCallbacksTracker::skipPath(llvm::StringRef path)
 {
     return false;
 }
