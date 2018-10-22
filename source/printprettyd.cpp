@@ -38,6 +38,23 @@ using namespace clang::tooling;
 namespace
 {
 
+template<typename T>
+class StmtFinderVisitor : public RecursiveASTVisitor<StmtFinderVisitor<T>>
+{
+public:
+    T* node = nullptr;
+
+    bool TraverseStmt(Stmt* stmt)
+    {
+        if (isa<T>(stmt))
+        { 
+            node = cast<T>(stmt);
+            return false;
+        }
+        return true;
+    }
+};
+
 // Looks for 'this' or '*this', when found aborts traversing
 class HasCXXThisVisitor : public RecursiveASTVisitor<HasCXXThisVisitor>
 {
@@ -88,6 +105,7 @@ class CppDASTPrinterVisitor : public RecursiveASTVisitor<CppDASTPrinterVisitor>
     PrintingPolicy Policy;
     const ASTContext *Context;
     bool reverse = false;
+    bool isCtorInitializer = false;
 
 public:
     explicit CppDASTPrinterVisitor(raw_ostream &os, PrinterHelper *helper,
@@ -273,6 +291,24 @@ public:
         return false;
     }
 
+    bool VisitCaseStmt(CaseStmt *Node) 
+    {
+        OS << "case ";
+        TraverseStmt(Node->getLHS());
+        // GNU specific extension, nothing to look at, just move on
+        #if 0
+        if (Node->getRHS())
+        {
+            OS << " ... ";
+            TraverseStmt(Node->getRHS());
+        }
+        #endif
+        OS << ":\n";
+
+        TraverseStmt(Node->getSubStmt());
+        return false;
+    }
+
     bool VisitSwitchStmt(SwitchStmt *Node)
     {
         //Indent();
@@ -379,11 +415,49 @@ public:
         return false;
     }
 
+    bool TraverseConstructorInitializer(CXXCtorInitializer *I)
+    {
+        isCtorInitializer = true;
+        if (!I->isWritten())
+            return false;
+
+        auto m = I->getMember();
+        auto builtin = m->getType()->isBuiltinType() || m->getType()->isAnyPointerType();
+        OS << m->getName() << " = ";
+        if (!builtin)
+            OS << DlangBindGenerator::toDStyle(m->getType()) << "(";
+
+        TraverseStmt(I->getInit());
+
+        if (!builtin)
+            OS << ")";
+        OS << ";\n";
+
+        return false;
+    }
+
     bool VisitCXXConstructExpr(CXXConstructExpr *E)
     {
-        OS << DlangBindGenerator::toDStyle(E->getType());
+        auto br = E->getParenOrBraceRange();
+        bool canBeImplicit = E->getConstructor()->isImplicitlyInstantiable();
+        bool prependType = !br.isValid() || canBeImplicit;
 
-        if (E->isListInitialization() && !E->isStdInitListInitialization())
+        if (!E->isElidable())
+        {
+            StmtFinderVisitor<CXXFunctionalCastExpr> finder;
+            finder.TraverseStmt(E);
+            if (!finder.node)
+                prependType = true;
+        }
+        
+
+        // if doesn't have braces might mean it is implicit ctor match
+        if (prependType && !isCtorInitializer)
+        {
+            OS << DlangBindGenerator::toDStyle(E->getType());
+        }
+
+        if ((prependType && br.isInvalid()) || (E->isListInitialization() && !E->isStdInitListInitialization()))
             OS << "(";
 
         for (unsigned i = 0, e = E->getNumArgs(); i != e; ++i)
@@ -399,8 +473,9 @@ public:
             TraverseStmt(E->getArg(i));
         }
 
-        if (E->isListInitialization() && !E->isStdInitListInitialization())
+        if ( (prependType && br.isInvalid()) || (E->isListInitialization() && !E->isStdInitListInitialization()))
             OS << ")";
+
         return false;
     }
 
@@ -428,7 +503,7 @@ public:
 
         if (auto *FD = dyn_cast<FieldDecl>(Node->getMemberDecl()))
             if (FD->isAnonymousStructOrUnion())
-                return !thisBase;
+                return false;
 
         if (NestedNameSpecifier *Qualifier = Node->getQualifier())
             Qualifier->print(OS, Policy);
@@ -692,7 +767,7 @@ public:
             return false;
         }
         else TraverseStmt(Node->GetTemporaryExpr());
-        return true;
+        return false;
     }
 
 
@@ -722,6 +797,19 @@ public:
         //if (Node->hasExplicitTemplateArgs())
         //    printTemplateArgumentList(OS, Node->template_arguments(), Policy);
         return true;
+    }
+
+    bool VisitCXXFunctionalCastExpr(CXXFunctionalCastExpr *Node) 
+    {
+        OS << DlangBindGenerator::toDStyle(Node->getType());
+        // If there are no parens, this is list-initialization, and the braces are
+        // part of the syntax of the inner construct.
+        if (Node->getLParenLoc().isValid())
+            OS << "(";
+        TraverseStmt(Node->getSubExpr());
+        if (Node->getLParenLoc().isValid())
+            OS << ")";
+        return false;
     }
 
     bool VisitCXXTemporaryObjectExpr(CXXTemporaryObjectExpr *Node) 
@@ -950,4 +1038,12 @@ void printPrettyD(const Stmt *stmt, raw_ostream &OS, PrinterHelper *Helper,
 {
     CppDASTPrinterVisitor P(OS, Helper, Policy, Indentation, Context);
     P.TraverseStmt(const_cast<Stmt*>(stmt));
+}
+
+void printPrettyD(const CXXCtorInitializer *init, raw_ostream &OS, PrinterHelper *Helper,
+                     const PrintingPolicy &Policy, unsigned Indentation /*= 0*/,
+                     const ASTContext *Context /*= nullptr*/)
+{
+    CppDASTPrinterVisitor P(OS, Helper, Policy, Indentation, Context);
+    P.TraverseConstructorInitializer(const_cast<CXXCtorInitializer*>(init));
 }

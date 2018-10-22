@@ -50,7 +50,7 @@ std::vector<std::string> reservedIdentifiers = {
     "out", "ref", "version", "debug", "mixin", "with", "unittest", "typeof", "typeid", "super", "body",
     "shared", "pure", "package", "module", "inout", "in", "import", "invariant", "immutable", "interface",
     "function", "delegate", "final", "export", "deprecated", "alias", "abstract", "synchronized",
-    "byte", "ubyte", "uint", "ushort"
+    "byte", "ubyte", "uint", "ushort", "string"
 };
 
 const char* MODULE_HEADER =
@@ -1269,7 +1269,12 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
 
         if (const auto conv = llvm::dyn_cast<CXXConversionDecl>(m))
         {
-            const auto tn = toDStyle(conv->getConversionType());
+            // try remove ref from template argument for conversions
+            auto targetType = conv->getConversionType();
+            if (targetType->isReferenceType())
+                targetType = targetType->getPointeeType();
+
+            const auto tn = toDStyle(targetType);
             funcName = "opCast(TType:";
             funcName.append(tn);
             funcName.append(")");
@@ -1475,15 +1480,13 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
             out << "/* WINDOWS MANGLING OVERRIDE NOT YET FINISHED, ADJUST MANUALLY! */ ";
         
         // write function body
-        if (m->isInlined() && m->hasInlineBody())
+        if (m->isInlined() && m->hasInlineBody() && !isDtor)
         {
-            std::string s;
-            llvm::raw_string_ostream os(s);
-            std::stringstream ss;
-            if (m->getBody())
-            {
-                //m->getBody()->printPretty(os, nullptr, *DlangBindGenerator::g_printPolicy);
-                printPrettyD(m->getBody(), os, nullptr, *DlangBindGenerator::g_printPolicy);
+            auto writeMultilineExpr = [this, commentOut, ast](auto expr) {
+                std::string s;
+                llvm::raw_string_ostream os(s);
+                std::stringstream ss;
+                printPrettyD(expr, os, nullptr, *DlangBindGenerator::g_printPolicy, 0, ast);
                 ss << os.str();
                 std::string line;
                 for (int i = 0; std::getline(ss, line); i++)
@@ -1493,12 +1496,64 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
                     textReplaceArrowColon(line);
                     out << line << std::endl;
                 }
+            };
+
+            // for now just mix initializer list and ctor body in extra set of braces
+            bool hasInitializerList = false;
+            bool isEmptyBody = true;
+            bool isTemplated = decl->isTemplated() || m->isTemplated();
+            if (m->getBody())
+            if (auto body = dyn_cast<CompoundStmt>(m->getBody())) // can it actually be anything else?
+                isEmptyBody = body->body_empty();
+
+            if (isCtor && !isTemplated)
+            {
+                const auto ctdecl = cast<CXXConstructorDecl>(m);
+                hasInitializerList = ctdecl->getNumCtorInitializers() != 0
+                    && std::find_if( ctdecl->init_begin(), ctdecl->init_end(), 
+                        //[](auto x) {return x->isInClassMemberInitializer();}
+                        [](auto x) {return x->isWritten();}
+                        ) != ctdecl->init_end();
+
+                if (hasInitializerList)
+                    out << "{" << std::endl << "// initializer list" << std::endl;
+
+                for(const auto init : ctdecl->inits())
+                {
+                    // This will be handled at some point later by memberIterate() 
+                    if (init->isInClassMemberInitializer())
+                        continue;
+                    if (auto member = init->getMember())
+                    {
+                        if (commentOut)
+                            out << "//";
+                        //out << sanitizedIdentifier(member->getNameAsString()) << " = ";
+                        writeMultilineExpr(init);
+                    }
+                }
+
+                if (hasInitializerList && !isEmptyBody)
+                    out << "// ctor body" << std::endl;
             }
-            else 
-                if (isCtor && !(decl->isTemplated() || m->isTemplated())) // this might mean all the stuff done by initializer lists
-                    out << " {}";
-                else // something happened, just finish the function decl
-                    out << ";";
+
+            if (!isEmptyBody)
+            {
+                // write body after initializer list
+                writeMultilineExpr(m->getBody());
+            }
+
+            // close extra braces
+            if (hasInitializerList && isCtor && !isTemplated)
+            {
+                if (commentOut)
+                    out << "//";
+                out << "}";
+            }
+
+            if (!m->getBody() || (isEmptyBody && !hasInitializerList))
+            {
+                out << ";";
+            }
         }
         else
         {

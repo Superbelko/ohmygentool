@@ -57,6 +57,10 @@
 void printPrettyD(const clang::Stmt *stmt, llvm::raw_ostream &OS, clang::PrinterHelper *Helper,
                      const clang::PrintingPolicy &Policy, unsigned Indentation = 0,
                      const clang::ASTContext *Context = nullptr);
+// Same as above but for ctor initializers
+void printPrettyD(const clang::CXXCtorInitializer *init, llvm::raw_ostream &OS, clang::PrinterHelper *Helper,
+                     const clang::PrintingPolicy &Policy, unsigned Indentation = 0,
+                     const clang::ASTContext *Context = nullptr);
 
 
 struct DlangBindGenerator : public gentool::IAbstractGenerator
