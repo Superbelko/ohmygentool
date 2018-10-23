@@ -79,6 +79,15 @@ namespace fs = std::experimental::filesystem;
 #endif
 
 
+static constexpr char* HELP_MSG = 
+R"(Oh My Gentool - v0.0.1
+Generates D bindings from C/C++ code
+
+USAGE:
+	gentool <project.json>
+
+	<project.json>: .json configuration file path
+)";
 
 
 
@@ -391,7 +400,7 @@ int main(int argc, const char **argv)
 		path = argv[1];
 	else
 	{
-		std::cout << "error: .json configuration file expected" << std::endl;
+		std::cout << HELP_MSG << std::endl;
 		return 1;
 	}
 
