@@ -14,18 +14,19 @@ Merely a ~~simple script~~ tool for parsing C/C++ source files based on clang co
 * [C] Can do stuff
 * [C++] Can do stuff, just not any stuff
 * [C++] Also writes inline functions bodies for you
+* [C++] (Experimental) Operator overloading support
+* (Experimental) Extracts simple macros
 * Basic bitfields support
 * Does de-anonimizing for structs and unions for D target
 
 ##### Limitations
-* MS C++ compiler handles "float * const" function parameters differently, requires mangling override, planned
-* C++ operator overloading translation is not finished yet
-* C++ constructor initializer list not processed yet, but is planned
+* MS C++ compiler handles "someType * const" function parameters differently, requires mangling override, planned
+* Operator precedence order is not converted, one should validate the formulas after conversion
 * C++ move and copy constructors are not handled properly yet
-* C++ template inline functions issues
+* Multiple inheritance is not handled yet
 * Does not detects "virtual" requirements to filter struct vs class usage, planned
-* Does not handles inline functions conversion yet
-* Preprocessor stuff are completely invisible to this tool *(see[1])*
+* Does limited inline functions conversion
+* Preprocessor stuff are completely invisible to this tool *(see[1])*, what this means in practice - you will see a lot of garbage from expanded macro, such as ```(void(0));```
 * Any non-trivial code will require manual adjustments, and sometimes even trivial code as well
 * Not production ready, and doubtly will ever be
 * Just too much 'yet'
