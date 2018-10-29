@@ -243,6 +243,24 @@ public:
         return false;
     }
 
+    bool VisitGotoStmt(GotoStmt *Node) 
+    {
+        OS << "goto " << Node->getLabel()->getName() << ";\n";
+        return true;
+    }
+
+    bool VisitContinueStmt(ContinueStmt *Node) 
+    {
+        OS << "continue;\n";
+        return true;
+    }
+
+    bool VisitBreakStmt(BreakStmt *Node) 
+    {
+        OS << "break;\n";
+        return true;
+    }
+
     bool VisitIfStmt(IfStmt *If)
     {
         //Indent();
@@ -442,6 +460,7 @@ public:
         bool canBeImplicit = E->getConstructor()->isImplicitlyInstantiable();
         bool prependType = !br.isValid() || canBeImplicit;
 
+        /*
         if (!E->isElidable())
         {
             StmtFinderVisitor<CXXFunctionalCastExpr> finder;
@@ -449,6 +468,7 @@ public:
             if (!finder.node)
                 prependType = true;
         }
+        */
         
 
         // if doesn't have braces might mean it is implicit ctor match
