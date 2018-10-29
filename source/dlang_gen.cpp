@@ -177,6 +177,29 @@ void textReplaceArrowColon(std::string& in)
 }
 
 
+class NamespacePolicy_StringList : public NamespacePolicy
+{
+    DlangBindGenerator* gen;
+    void setGenerator(DlangBindGenerator* g) { gen = g; }
+    void beginEntry(const clang::Decl* decl, const std::string& extern_)
+    {
+        auto& out = gen->out;
+        std::vector<std::string> nestedNS;
+        gen->getJoinedNS(decl->getDeclContext(), nestedNS);
+
+        out << "extern(" << extern_ << ", ";
+        auto it = std::rbegin(nestedNS);
+        while (it != nestedNS.rend())
+        {
+            out << "\"" << *it << "\""; if (it != (nestedNS.rend() - 1)) out << ",";
+            it++;
+        }
+        out << ")" << std::endl;
+    }
+    void finishEntry(const clang::Decl* decl) {}
+};
+
+
 
 bool DlangBindGenerator::isRelevantPath(const std::string_view path)
 {
@@ -209,7 +232,14 @@ void DlangBindGenerator::setOptions(const InputOptions *inOpt, const OutputOptio
         fileOut.open(outOpt->path);
         if (std::find(outOpt->extras.begin(), outOpt->extras.end(), "attr-nogc") != outOpt->extras.end())
             nogc = true;
+
+        // TODO: select valid policy here
+        //nsPolicy.reset(new NamespacePolicy_StringList());
     }
+
+    if (!nsPolicy)
+        nsPolicy = std::make_unique<NamespacePolicy_StringList>();
+    nsPolicy->setGenerator(this);
 }
 
 
@@ -333,52 +363,16 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
 
     if (!addType(decl, storedTypes))
         return;
-
-    std::vector<std::string> nestedNS;
-    getJoinedNS(decl, nestedNS);
-    const bool hasNamespace = nestedNS.size() > 0;
-    std::string mixinId;
-
-    // Note: until proper solution implemnted in D (probably namespace as string)
-    //  write hacky solution of wrapping namespace
-    //  inside mixin template with code mixin
-    // 
-    // mixin template uniq_id_here {
-    //  mixin(`extern(C++, namespace.list) void actual_function();`)
-    // } mixin uniq_id_here;
+    
+    const bool hasNamespace = decl->getDeclContext()->isNamespace();
+    const auto externStr = externAsString(decl->getDeclContext()->isExternCContext());
 
     // linkage & namespace
     if (!hasNamespace)
-        out << "extern(" << externAsString(decl->getDeclContext()->isExternCContext()) << ")" << std::endl;
-    else if (!oldNamespaces)
-    {
-        out << "extern(" << externAsString(decl->getDeclContext()->isExternCContext()) << ", ";
-        auto it = std::rbegin(nestedNS);
-        while (it != nestedNS.rend())
-        {
-            out << "\"" << *it << "\""; if (it != (nestedNS.rend() - 1)) out << ",";
-            it++;
-        }
-        out << ")" << std::endl;
-    }
+        out << "extern(" << externStr << ")" << std::endl;
     else
-    {
-        mixinId = getNextMixinId();
-        out << "mixin template " << mixinId << "() {" << std::endl;
-        out.imore(4); // adds indent to all stuff below
-        out << "mixin(`";
+        nsPolicy->beginEntry(decl, externStr);
 
-        out << "extern(" << externAsString(decl->getDeclContext()->isExternCContext()) << ", ";
-        auto it = std::rbegin(nestedNS);
-        while (it != nestedNS.rend())
-        {
-            out << *it; if (it != (nestedNS.rend() - 1)) out << ".";
-            it++;
-        }
-        out << ")" << std::endl;
-    }
-
-    
 
     TypeInfo ti;
     if (!decl->isTemplated()) // skip templated stuff for now
@@ -437,17 +431,7 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
                 if (tparams)
                 {
                     out << "(";
-                    for(const auto tp : *tparams)
-                    {
-                        if (isa<NonTypeTemplateParmDecl>(tp))
-                        {
-                            auto nt = cast<NonTypeTemplateParmDecl>(tp);
-                            out << toDStyle(nt->getType()) << " ";
-                        }
-                        out << tp->getName().str();
-                        if (tp != *(tparams->end()-1))
-                            out << ", ";
-                    }
+                    writeTemplateArgs(classTemplate);
                     out << ")";
                 }
             }
@@ -472,12 +456,8 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
     }
     out << "}" << std::endl;
 
-    if (hasNamespace && oldNamespaces)
-    {
-        out << "`);" << std::endl;
-        out.iless(4); // indent out from mixin
-        out << "} "  << "mixin " << mixinId << ";" << std::endl;
-    }
+    if (hasNamespace)
+        nsPolicy->finishEntry(decl);
 }
 
 
@@ -533,49 +513,14 @@ void DlangBindGenerator::onFunction(const clang::FunctionDecl *decl)
         return;
 
     const auto fn = decl;
-    std::vector<std::string> nestedNS;
-    getJoinedNS(decl, nestedNS);
-    const bool hasNamespace = nestedNS.size() > 0;
-    std::string mixinId;
-
-    // Note: until proper solution implemnted in D (probably namespace as string)
-    //  write hacky solution of wrapping namespace
-    //  inside mixin template with code mixin
-    // 
-    // mixin template uniq_id_here {
-    //  mixin(`extern(C++, namespace.list) void actual_function();`)
-    // } mixin uniq_id_here;
+    const bool hasNamespace = decl->getDeclContext()->isNamespace();
+    const auto externStr = externAsString(decl->getDeclContext()->isExternCContext());
 
     // linkage & namespace
     if (!hasNamespace)
-        out << "extern(" << externAsString(fn->isExternC()) << ")" << std::endl;
-    else if (!oldNamespaces)
-    {
-        out << "extern(" << externAsString(decl->getDeclContext()->isExternCContext()) << ", ";
-        auto it = std::rbegin(nestedNS);
-        while (it != nestedNS.rend())
-        {
-            out << "\"" << *it << "\""; if (it != (nestedNS.rend() - 1)) out << ",";
-            it++;
-        }
-        out << ")" << std::endl;
-    }
+        out << "extern(" << externStr << ")" << std::endl;
     else
-    {
-        mixinId = getNextMixinId();
-        out << "mixin template " << mixinId << "() {" << std::endl;
-        out.imore(4); // adds indent to all stuff below
-        out << "mixin(`";
-
-        out << "extern(" << externAsString(fn->isExternC()) << ", ";
-        auto it = std::rbegin(nestedNS);
-        while (it != nestedNS.rend())
-        {
-            out << *it; if (it != (nestedNS.rend() - 1)) out << ".";
-            it++;
-        }
-        out << ")" << std::endl;
-    }
+        nsPolicy->beginEntry(decl, externStr);
 
     // ret type
     {
@@ -583,13 +528,16 @@ void DlangBindGenerator::onFunction(const clang::FunctionDecl *decl)
         out << typeStr << " ";
     }
     // function name
-    out << fn->getName().str() << " (";
+    out << fn->getName().str();
 
     if (fn->isTemplated())
     {
         // note that we write to already opened parenthesis
         if (const auto ftd = fn->getDescribedTemplate())
         {
+            out << "(";
+            writeTemplateArgs(ftd);
+            /*
             const auto tplist = ftd->getTemplateParameters();
             for (const auto tp : *tplist)
             {
@@ -597,40 +545,21 @@ void DlangBindGenerator::onFunction(const clang::FunctionDecl *decl)
                 if (tp != *(tplist->end() - 1))
                     out << ", ";
             }
-            // close template params list and open runtime args
-            out << ")(";
+            */
+            out << ")";
         }
     }
 
     // argument list
-    for (auto p = fn->param_begin(); p != fn->param_end(); p++)
-    {
-        if (p != fn->param_begin() && p != fn->param_end())
-            out << ", ";
-
-        const auto typeStr = toDStyle((*p)->getType());
-        out << typeStr << " " << sanitizedIdentifier((*p)->getName().str());
-
-        if (const auto defaultVal = (*p)->getDefaultArg())
-        {
-            std::string s;
-            llvm::raw_string_ostream os(s);
-            //defaultVal->printPretty(os, nullptr, *DlangBindGenerator::g_printPolicy);
-            printPrettyD(defaultVal, os, nullptr, *DlangBindGenerator::g_printPolicy);
-            out << " = " << os.str();
-        }
-    }
+    out << "(";
+    writeFnRuntimeArgs(fn);
     out << ")";
     if (nogc)
         out << " @nogc";
     out << ";" << std::endl;
 
-    if (hasNamespace && oldNamespaces)
-    {
-        out << "`);" << std::endl;
-        out.iless(4); // indent out from mixin
-        out << "} "  << "mixin " << mixinId << ";" << std::endl;
-    }
+    if (hasNamespace)
+        nsPolicy->finishEntry(decl);
 
     out << std::endl;
 }
@@ -698,13 +627,13 @@ void DlangBindGenerator::onGlobalVar(const clang::VarDecl *decl)
     {
         std::string s;
         llvm::raw_string_ostream os(s);
-        //init->printPretty(os, nullptr, *DlangBindGenerator::g_printPolicy);
         printPrettyD(init, os, nullptr, *DlangBindGenerator::g_printPolicy);
         out << " = ";
-        if (decl->getType()->isFloatingType())
-            out << _adjustVarInit(os.str());
-        else
-            out << os.str();
+        // if (decl->getType()->isFloatingType())
+        //     out << _adjustVarInit(os.str());
+        // else
+        //     out << os.str();
+        out << os.str();
     }
     out << ";";
     out << std::endl;
@@ -1039,6 +968,7 @@ void DlangBindGenerator::innerDeclIterate(const clang::RecordDecl *decl)
             onStructOrClassEnter(d);
             onStructOrClassLeave(d);
         }
+        // TODO: typedefs
     }
 }
 
@@ -1183,21 +1113,6 @@ std::string DlangBindGenerator::getAccessStr(clang::AccessSpecifier ac, bool isS
 }
 
 
-void DlangBindGenerator::setOperatorOp(std::string &str, const char *action, bool templated /* = true */)
-{
-    if (templated)
-    {
-        str.append("(string op : \"");
-        str.append(action);
-        str.append("\")");
-    }
-    else
-    {
-        str.append(action);
-    }
-}
-
-
 void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
 {
     clang::ASTContext *ast = &decl->getASTContext();
@@ -1275,134 +1190,24 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
                 targetType = targetType->getPointeeType();
 
             const auto tn = toDStyle(targetType);
-            funcName = "opCast(TType:";
-            funcName.append(tn);
-            funcName.append(")");
+            funcName = "opCast(Ty:" + tn + ")";
             isConversionOp = true;
         }
 
         if (isOperator)
         {
-            // get operator name and args
-            const auto op = m->getOverloadedOperator();
-            const auto psize = m->param_size();
-            const bool isBinary = psize == 1;
-            const bool isUnary = psize == 0;
-
-            if (isBinary)
-                funcName = "opBinary";
-            else if (isUnary)
-                funcName = "opUnary";
-            else
-                funcName = "op";
-
-            switch (op)
-            {
-            case OverloadedOperatorKind::OO_Plus:
-                setOperatorOp(funcName, "+"); 
-                break;
-            case OverloadedOperatorKind::OO_Minus:
-                setOperatorOp(funcName, "-");
-                break;
-            case OverloadedOperatorKind::OO_Star:
-                setOperatorOp(funcName, "*");
-                break;
-            case OverloadedOperatorKind::OO_Slash:
-                setOperatorOp(funcName, "/");
-                break;
-            case OverloadedOperatorKind::OO_Percent:
-                setOperatorOp(funcName, "%");
-                break;
-            case OverloadedOperatorKind::OO_Caret:
-                setOperatorOp(funcName, "^");
-                break;
-            case OverloadedOperatorKind::OO_Amp:
-                setOperatorOp(funcName, "&");
-                break;
-            case OverloadedOperatorKind::OO_Pipe:
-                setOperatorOp(funcName, "|");
-                break;
-            case OverloadedOperatorKind::OO_Call:
-                funcName = "op";
-                setOperatorOp(funcName, "Call", false);
-                break;
-            case OverloadedOperatorKind::OO_Subscript:
-                funcName = "op";
-                setOperatorOp(funcName, "Index", false);
-                break;
-            case OverloadedOperatorKind::OO_AmpAmp:
-                funcName = "op_and"; customMangle = true;
-                break;
-            case OverloadedOperatorKind::OO_PipePipe:
-                funcName = "op_or"; customMangle = true;
-                break;
-            case OverloadedOperatorKind::OO_Less:
-                funcName = "op_lt"; customMangle = true;
-                break;
-            case OverloadedOperatorKind::OO_Greater:
-                funcName = "op_gt"; customMangle = true;
-                break;
-            case OverloadedOperatorKind::OO_LessEqual:
-                funcName = "op_le"; customMangle = true;
-                break;
-            case OverloadedOperatorKind::OO_GreaterEqual:
-                funcName = "op_ge"; customMangle = true;
-                break;
-            case OverloadedOperatorKind::OO_Exclaim:
-                funcName = "op_unot"; customMangle = true;
-                break;
-            case OverloadedOperatorKind::OO_ExclaimEqual:
-                funcName = "op_ne"; customMangle = true;
-                break;
-            case OverloadedOperatorKind::OO_PlusEqual:
-                funcName = "opOpAssign"; 
-                setOperatorOp(funcName, "+");
-                break;
-            case OverloadedOperatorKind::OO_MinusEqual:
-                funcName = "opOpAssign"; 
-                setOperatorOp(funcName, "-");
-                break;
-            case OverloadedOperatorKind::OO_StarEqual:
-                funcName = "opOpAssign"; 
-                setOperatorOp(funcName, "*");
-                break;
-            case OverloadedOperatorKind::OO_SlashEqual:
-                funcName = "opOpAssign"; 
-                setOperatorOp(funcName, "/");
-                break;
-            case OverloadedOperatorKind::OO_PipeEqual:
-                funcName = "opOpAssign"; 
-                setOperatorOp(funcName, "|");
-                break;
-            case OverloadedOperatorKind::OO_AmpEqual:
-                funcName = "opOpAssign"; 
-                setOperatorOp(funcName, "&");
-                break;
-            case OverloadedOperatorKind::OO_LessLessEqual:
-                funcName = "opOpAssign"; 
-                setOperatorOp(funcName, "<<");
-                break;
-            case OverloadedOperatorKind::OO_GreaterGreaterEqual:
-                funcName = "opOpAssign"; 
-                setOperatorOp(funcName, ">>");
-                break;
-            case OverloadedOperatorKind::OO_Equal:
-                if (m->getNumParams() == 1 
-                    && m->getReturnType()->isReferenceType()
-                    && m->parameters()[0]->getType()->getAsRecordDecl() == m->getReturnType()->getAsRecordDecl()
-                ){
-                    idAssign = true;
-                }
-                funcName = "op";
-                setOperatorOp(funcName, "Assign", false);
-                break;
-            case OverloadedOperatorKind::OO_EqualEqual:
-                funcName = "opEquals";
-                break;
-            default:
-                setOperatorOp(funcName, getOperatorSpelling(op));
-                break;
+            if (m->getOverloadedOperator() == OverloadedOperatorKind::OO_Equal)
+            if (m->getNumParams() == 1 
+                && m->getReturnType()->isReferenceType()
+                && m->parameters()[0]->getType()->getAsRecordDecl() == m->getReturnType()->getAsRecordDecl()
+            ){
+                idAssign = true;
             }
+
+            // Get and recombine name with template args (if any)
+            auto [name, templatedOp, customMangle_] = getOperatorName(m);
+            funcName = name + "(" + templatedOp + ")";
+            customMangle = customMangle_;
         }
 
         if (customMangle)
@@ -1432,6 +1237,11 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
             out << "// ";
         }
 
+        if (moveCtor)
+            out << "// move ctor" << std::endl;
+        if (copyCtor)
+            out << "// copy ctor" << std::endl;
+
         if (m->isInlined() && m->hasInlineBody())
         {
             out << "/* inline */ ";
@@ -1460,24 +1270,17 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
             out << funcName;
         else
             out << m->getName().str();
+        
+        // runtime args
         out << "(";
-        for (const auto fp : m->parameters())
-        {
-            // check if is 'type * const'
-            if (fp->getType()->isPointerType() && fp->getType().isConstQualified() && !fp->getType()->getPointeeType().isConstQualified())
-                hasConstPtrToNonConst = true;
-
-            out << toDStyle(fp->getType()) << " " << sanitizedIdentifier(fp->getName().str());
-            if (fp != *(m->param_end() - 1))
-                out << ", ";
-        }
+        writeFnRuntimeArgs(m);
         out << ")";
 
         if (nogc) 
             out << " @nogc ";
 
         if (hasConstPtrToNonConst)
-            out << "/* WINDOWS MANGLING OVERRIDE NOT YET FINISHED, ADJUST MANUALLY! */ ";
+            out << "/* MANGLING OVERRIDE NOT YET FINISHED, ADJUST MANUALLY! */ ";
         
         // write function body
         if (m->isInlined() && m->hasInlineBody() && !isDtor)
@@ -1564,6 +1367,42 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
     }
 }
 
+void DlangBindGenerator::writeFnRuntimeArgs(const clang::FunctionDecl* fn)
+{
+    for (const auto fp : fn->parameters())
+    {
+        const auto typeStr = toDStyle(fp->getType());
+        out << typeStr << " " << sanitizedIdentifier(fp->getName().str());
+
+        if (const auto defaultVal = fp->getDefaultArg())
+        {
+            std::string s;
+            llvm::raw_string_ostream os(s);
+            printPrettyD(defaultVal, os, nullptr, *DlangBindGenerator::g_printPolicy);
+            out << " = " << os.str();
+        }
+
+        if (fp != *(fn->param_end() - 1))
+            out << ", ";
+    }
+}
+
+void DlangBindGenerator::writeTemplateArgs(const clang::TemplateDecl* td)
+{
+    const auto tplist = td->getTemplateParameters();
+    for (const auto tp : *tplist)
+    {
+        if (isa<NonTypeTemplateParmDecl>(tp))
+        {
+            auto nt = cast<NonTypeTemplateParmDecl>(tp);
+            out << toDStyle(nt->getType()) << " ";
+        }
+        out << tp->getName().str();
+        if (tp != *(tplist->end() - 1))
+            out << ", ";
+    }
+}
+
 
 std::tuple<std::string, std::string> DlangBindGenerator::getFSPathPart(const std::string_view loc)
 {
@@ -1610,4 +1449,115 @@ std::string DlangBindGenerator::getNextMixinId()
     ss << "mxtid" << std::setw(3) << std::setfill('0') << mixinTemplateId;
     mixinTemplateId += 1;
     return ss.str();
+}
+
+std::tuple<std::string, std::string, bool> DlangBindGenerator::getOperatorName(const clang::FunctionDecl* decl)
+{
+    // get operator name and args
+    const auto op = decl->getOverloadedOperator();
+    const auto psize = decl->param_size();
+    const bool isBinary = psize == 1;
+    const bool isUnary = psize == 0;
+
+    auto arityStr = [isBinary]() {return isBinary? "opBnary" : "opUnary";};
+    auto getOpArgs = [](const std::string& s) { return std::string("string op : \"") + s + "\""; };
+
+    bool customMangle = false;
+    std::string funcName;
+    std::string opSign;
+    switch (op)
+    {
+    case OverloadedOperatorKind::OO_Plus:
+        funcName = arityStr(); opSign = getOpArgs("+");
+        break;
+    case OverloadedOperatorKind::OO_Minus:
+        funcName = arityStr(); opSign = getOpArgs("-");
+        break;
+    case OverloadedOperatorKind::OO_Star:
+        funcName = arityStr(); opSign = getOpArgs("*");
+        break;
+    case OverloadedOperatorKind::OO_Slash:
+        funcName = arityStr(); opSign = getOpArgs("/");
+        break;
+    case OverloadedOperatorKind::OO_Percent:
+        funcName = arityStr(); opSign = getOpArgs("%");
+        break;
+    case OverloadedOperatorKind::OO_Caret:
+        funcName = arityStr(); opSign = getOpArgs("^");
+        break;
+    case OverloadedOperatorKind::OO_Amp:
+        funcName = arityStr(); opSign = getOpArgs("&");
+        break;
+    case OverloadedOperatorKind::OO_Pipe:
+        funcName = arityStr(); opSign = getOpArgs("|");
+        break;
+    case OverloadedOperatorKind::OO_Call:
+        funcName = "opCall";
+        break;
+    case OverloadedOperatorKind::OO_Subscript:
+        funcName = "opIndex";
+        break;
+    case OverloadedOperatorKind::OO_AmpAmp:
+        funcName = "op_and"; customMangle = true;
+        break;
+    case OverloadedOperatorKind::OO_PipePipe:
+        funcName = "op_or"; customMangle = true;
+        break;
+    case OverloadedOperatorKind::OO_Less:
+        funcName = "op_lt"; customMangle = true;
+        break;
+    case OverloadedOperatorKind::OO_Greater:
+        funcName = "op_gt"; customMangle = true;
+        break;
+    case OverloadedOperatorKind::OO_LessEqual:
+        funcName = "op_le"; customMangle = true;
+        break;
+    case OverloadedOperatorKind::OO_GreaterEqual:
+        funcName = "op_ge"; customMangle = true;
+        break;
+    case OverloadedOperatorKind::OO_Exclaim:
+        funcName = "op_not"; customMangle = true;
+        break;
+    case OverloadedOperatorKind::OO_ExclaimEqual:
+        funcName = "op_ne"; customMangle = true;
+        break;
+    case OverloadedOperatorKind::OO_PlusEqual:
+        funcName = "opOpAssign"; opSign = getOpArgs("+");
+        break;
+    case OverloadedOperatorKind::OO_MinusEqual:
+        funcName = "opOpAssign"; opSign = getOpArgs("-");
+        break;
+    case OverloadedOperatorKind::OO_StarEqual:
+        funcName = "opOpAssign"; opSign = getOpArgs("*");
+        break;
+    case OverloadedOperatorKind::OO_SlashEqual:
+        funcName = "opOpAssign"; opSign = getOpArgs("/");
+        break;
+    case OverloadedOperatorKind::OO_PipeEqual:
+        funcName = "opOpAssign"; opSign = getOpArgs("|");
+        break;
+    case OverloadedOperatorKind::OO_AmpEqual:
+        funcName = "opOpAssign"; opSign = getOpArgs("&");
+        break;
+    case OverloadedOperatorKind::OO_LessLessEqual:
+        funcName = "opOpAssign"; opSign = getOpArgs("<<");
+        break;
+    case OverloadedOperatorKind::OO_GreaterGreaterEqual:
+        funcName = "opOpAssign"; opSign = getOpArgs(">>");
+        break;
+    case OverloadedOperatorKind::OO_Equal:
+        funcName = "opAssign";
+        break;
+    case OverloadedOperatorKind::OO_EqualEqual:
+        funcName = "opEquals";
+        break;
+    case OverloadedOperatorKind::OO_Arrow:
+        funcName = "opUnary"; opSign = getOpArgs("->");
+        break;
+    default:
+        funcName = "op"; opSign = getOperatorSpelling(op);
+        break;
+    }
+
+    return std::make_tuple(funcName, opSign, customMangle);
 }

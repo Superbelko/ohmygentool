@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <unordered_map>
 #include <string_view>
+#include <memory>
 
 #if __has_include(<filesystem>)
 #include <filesystem>
@@ -63,11 +64,17 @@ void printPrettyD(const clang::CXXCtorInitializer *init, llvm::raw_ostream &OS, 
                      const clang::ASTContext *Context = nullptr);
 
 
+class NamespacePolicy;
+class NamespacePolicy_StringList;
+
 struct DlangBindGenerator : public gentool::IAbstractGenerator
 {
+    friend class NamespacePolicy;
+    friend class NamespacePolicy_StringList;
 public:
     static thread_local clang::PrintingPolicy* g_printPolicy;
 protected:
+    std::unique_ptr<NamespacePolicy> nsPolicy;
     clang::SourceManager* SourceMgr;
 	std::ofstream fileOut;
 	OutStreamHelper out = OutStreamHelper(nullptr/*&std::cout*/, &fileOut);
@@ -123,7 +130,6 @@ public:
     static std::string toDStyle(clang::QualType type);
     static std::string sanitizedIdentifier(const std::string& id);
     static std::string getAccessStr(clang::AccessSpecifier ac, bool isStruct = false);
-    static void setOperatorOp(std::string& str, const char* action, bool templated = true);
 private:
     // returns "C" or "C++" depending on settings
     std::string externAsString(bool isExternC = false) const;
@@ -133,6 +139,13 @@ private:
     void fieldIterate(const clang::RecordDecl* decl);
     void innerDeclIterate(const clang::RecordDecl* decl);
     std::string getNextMixinId();
+
+    // Functions below are specific to functions 
+    void writeFnRuntimeArgs(const clang::FunctionDecl* fn);
+    void writeTemplateArgs(const clang::TemplateDecl* td);
+
+    // Get overloaded operator name & template args, such as { 'opBinary', 'string op:"+"'}
+    static std::tuple<std::string, std::string, bool> getOperatorName(const clang::FunctionDecl* decl);
     
     // Try to insert entry into dict, return true on success.
     template <typename T, typename S>
@@ -155,4 +168,16 @@ namespace fs = std::experimental::filesystem;
 		}
         return res;
     }
+};
+
+
+class NamespacePolicy
+{
+public:
+    virtual ~NamespacePolicy() {}
+    virtual void setGenerator(DlangBindGenerator* g) = 0;
+    // Called before writing record with namespace
+    virtual void beginEntry(const clang::Decl* decl, const std::string& extern_) = 0;
+    // Called after record done writing
+    virtual void finishEntry(const clang::Decl* decl) = 0;
 };
