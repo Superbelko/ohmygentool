@@ -458,17 +458,15 @@ public:
     {
         auto br = E->getParenOrBraceRange();
         bool canBeImplicit = E->getConstructor()->isImplicitlyInstantiable();
-        bool prependType = !br.isValid() || canBeImplicit;
+        bool prependType = false;
 
-        /*
-        if (!E->isElidable())
-        {
-            StmtFinderVisitor<CXXFunctionalCastExpr> finder;
-            finder.TraverseStmt(E);
-            if (!finder.node)
-                prependType = true;
-        }
-        */
+        if(E->isListInitialization())
+            prependType = true;
+
+        StmtFinderVisitor<CXXTemporaryObjectExpr> finder;
+        finder.TraverseStmt(E);
+        if (finder.node)
+            prependType = true;
         
 
         // if doesn't have braces might mean it is implicit ctor match
@@ -477,7 +475,7 @@ public:
             OS << DlangBindGenerator::toDStyle(E->getType());
         }
 
-        if ((prependType && br.isInvalid()) || (E->isListInitialization() && !E->isStdInitListInitialization()))
+        if ((prependType) || (E->isListInitialization() && !E->isStdInitListInitialization()))
             OS << "(";
 
         for (unsigned i = 0, e = E->getNumArgs(); i != e; ++i)
@@ -493,7 +491,7 @@ public:
             TraverseStmt(E->getArg(i));
         }
 
-        if ( (prependType && br.isInvalid()) || (E->isListInitialization() && !E->isStdInitListInitialization()))
+        if ( (prependType) || (E->isListInitialization() && !E->isStdInitListInitialization()))
             OS << ")";
 
         return false;
@@ -779,15 +777,7 @@ public:
 
     bool VisitMaterializeTemporaryExpr(MaterializeTemporaryExpr *Node)
     {
-        HasCXXTemporaryObjectExpr tempObjFinder;
-        tempObjFinder.TraverseStmt(Node->GetTemporaryExpr());
-        if (tempObjFinder.found)
-        {
-            VisitCXXTemporaryObjectExpr(tempObjFinder.found);
-            return false;
-        }
-        else TraverseStmt(Node->GetTemporaryExpr());
-        return false;
+        return true;
     }
 
 
@@ -884,7 +874,8 @@ public:
 
     bool VisitUnaryOperator(UnaryOperator *Node) {
         if (!Node->isPostfix()) {
-            OS << UnaryOperator::getOpcodeStr(Node->getOpcode());
+            if (!isa<CXXThisExpr>(Node->getSubExpr()))
+                OS << UnaryOperator::getOpcodeStr(Node->getOpcode());
 
             // Print a space if this is an "identifier operator" like __real, or if
             // it might be concatenated incorrectly like '+'.
