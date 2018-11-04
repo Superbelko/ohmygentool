@@ -123,12 +123,8 @@ DeclarationMatcher recordDeclMatcher = recordDecl(
 
 // free functions
 DeclarationMatcher funDeclMatcher = functionDecl(
-	//isDefinition(), 
-	hasDeclContext( 
-		anyOf(
-			translationUnitDecl(), 
-			namespaceDecl()
-		)
+	unless(
+		hasAncestor(recordDecl())
 	),
 	unless(anyOf(cxxMethodDecl(), ext::isOverloadedOperator()))
 ).bind("funDecl");
@@ -200,7 +196,11 @@ void RecordDeclMatcher<T>::run(const MatchFinder::MatchResult &Result)
 		rec = glob;
 	}
 
-	path = rec->getLocStart().printToString(srcMgr);
+	auto sfile = srcMgr.getFileID(rec->getLocation());
+	auto* f = srcMgr.getFileEntryForID(sfile);
+	if (f)
+		path = f->getName();
+	
 	if (!impl.isRelevantPath(path))
 		return;
 

@@ -1473,6 +1473,9 @@ std::tuple<std::string, std::string> DlangBindGenerator::getFSPathPart(const std
         }
     }
 
+    if (loc.length() && path.empty())
+        path = loc.substr();
+
     std::error_code _;
     path = fs::canonical(path, _).string();
     return std::make_tuple(path, lineCol);

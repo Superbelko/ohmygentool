@@ -157,8 +157,17 @@ namespace fs = std::filesystem;
 #elif __cpp_lib_experimental_filesystem
 namespace fs = std::experimental::filesystem;
 #endif
-        std::string loc = entry->getLocStart().printToString(entry->getASTContext().getSourceManager());
+        auto& SM = entry->getASTContext().getSourceManager();
+        std::string loc = entry->getLocation().printToString(SM);
         auto [path, linecol] = getFSPathPart(loc);
+        if (path.empty()) { // second attempt with different approach
+            auto sfile = SM.getFileID(entry->getLocation());
+            auto* f = SM.getFileEntryForID(sfile);
+            if (f) path = f->getName();
+        }
+        if (path.empty())
+            llvm::errs() << "addType() error: empty path for entry '" << entry->getName() << "'\n";
+
         loc = path + linecol;
         
         bool res = false;
