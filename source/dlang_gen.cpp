@@ -90,6 +90,18 @@ CppMethodAttr cppmethod() { return CppMethodAttr(); }
 struct PyExtract{}
 auto pyExtract(string name = null) { return PyExtract(); }
 
+mixin template RvalueRef()
+{
+    alias T = typeof(this);
+    static assert (is(T == struct));
+
+    @nogc @safe
+    ref const(T) byRef() const pure nothrow return
+    {
+        return this;
+    }
+}
+
 )";
 
 //
