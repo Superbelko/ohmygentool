@@ -200,6 +200,20 @@ class NamespacePolicy_StringList : public NamespacePolicy
 };
 
 
+bool hasVirtualMethods(const RecordDecl* rd)
+{
+    if (!isa<CXXRecordDecl>(rd))
+        return false;
+
+    auto isVirtual = [](const CXXMethodDecl* f) {
+        return f->isVirtual() == true;
+    };
+
+    const auto rec = cast<CXXRecordDecl>(rd);
+    auto found = std::find_if(rec->method_begin(), rec->method_end(), isVirtual) != rec->method_end();
+    return found || std::any_of(rec->bases_begin(), rec->bases_end(), [](auto a){ return hasVirtualMethods(a.getType()->getAsRecordDecl()); });
+}
+
 
 bool DlangBindGenerator::isRelevantPath(const std::string_view path)
 {
@@ -394,13 +408,13 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
     if (cxxdecl && (cxxdecl->getNumBases() || cxxdecl->getNumVBases()))
         isDerived = true;
 
-
-    if (decl->isClass() || isDerived)
-        out << "class ";
-    else if (decl->isStruct())
+    bool isVirtual = hasVirtualMethods(decl);
+    if (!isVirtual)
         out << "struct ";
     else if (decl->isUnion())
         out << "union ";
+    else //if (decl->isClass() || isDerived)
+        out << "class ";
 
     if (classOrStructName.empty())
     {
@@ -418,6 +432,7 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
     }
 
     out << classOrStructName;
+    std::vector<const clang::Decl*> nonvirt;
     if (cxxdecl)
     {
         auto classTemplate = cxxdecl->getDescribedClassTemplate();
@@ -437,7 +452,7 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
             }
         }
         // adds list of base classes
-        printBases(cxxdecl);
+        nonvirt = printBases(cxxdecl);
     }
     out << std::endl;
     out << "{" << std::endl;
@@ -450,6 +465,17 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
             out << "align(" << ti.Align / 8 << "):" << std::endl;
 #endif
         innerDeclIterate(decl);
+        int baseid = 0;
+        for (auto fakeBase : nonvirt)
+        {
+            if (!isa<RecordDecl>(fakeBase))
+                continue;
+            auto brd = cast<RecordDecl>(fakeBase);
+            out << brd->getNameAsString() << " ";
+            out << "_b" << baseid << ";" << std::endl;
+            out << "alias " << "_b" << baseid << " this;" << std::endl;
+            baseid+=1;
+        }
         fieldIterate(decl);
         if (cxxdecl)
         methodIterate(cxxdecl);
@@ -926,21 +952,32 @@ void DlangBindGenerator::getJoinedNS(const clang::DeclContext *decl, std::vector
     getJoinedNS(decl->getParent(), parts);
 }
 
-void DlangBindGenerator::printBases(const clang::CXXRecordDecl *decl)
+std::vector<const clang::Decl*> DlangBindGenerator::printBases(const clang::CXXRecordDecl *decl)
 {
+    std::vector<const clang::Decl*> nonvirt;
     unsigned int numBases = decl->getNumBases();
-
-    if (numBases > 0)
-        out << " : ";
+    bool first = true;
 
     // some quirks with array range ret type...
     for (const auto b : decl->bases())
     {
         numBases--;
+        Decl* rd = b.getType()->getAsRecordDecl(); 
+        if (rd && !hasVirtualMethods(cast<RecordDecl>(rd))){
+            nonvirt.push_back(rd);
+            continue;
+        }
+        
+        if (first) {
+            out << " : ";
+            first = false;
+        }
         out << toDStyle(b.getType());
-        if (numBases != 0)
+        if (numBases)
             out << ", ";
     }
+
+    return nonvirt;
 }
 
 
@@ -1122,6 +1159,8 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
     else
         mangleCtx.reset(clang::ItaniumMangleContext::create(*ast, ast->getDiagnostics()));
 
+    bool isVirtualDecl = hasVirtualMethods(decl);
+
     for (const auto m : decl->methods())
     {
         std::string mangledName;
@@ -1215,10 +1254,11 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
             // due to many little details unfortunately it's not there (yet)
             if (ast->getLangOpts().isCompatibleWithMSVC(LangOptions::MSVC2015))
             {
+                const auto pos = funcName.find('(');
                 out << "@pyExtract(\"" 
                     <<     decl->getNameAsString() << "::" << m->getNameAsString()
                     << "\")" << "   pragma(mangle, " << "nsgen."
-                    <<     decl->getNameAsString() << "_" << funcName << ".mangleof)"
+                    <<     decl->getNameAsString() << "_" << std::string_view(funcName.data(), pos) << ".mangleof)"
                     << std::endl;
             }
             else 
@@ -1230,7 +1270,7 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
         if (m->isDefaulted())
             out << "// (default) ";
 
-        bool commentOut = (!isClass && isDefaultCtor) || idAssign;
+        bool commentOut = (!isVirtualDecl && isDefaultCtor) || idAssign;
         // default ctor for struct not allowed
         if (commentOut)
         {
@@ -1459,7 +1499,7 @@ std::tuple<std::string, std::string, bool> DlangBindGenerator::getOperatorName(c
     const bool isBinary = psize == 1;
     const bool isUnary = psize == 0;
 
-    auto arityStr = [isBinary]() {return isBinary? "opBnary" : "opUnary";};
+    auto arityStr = [isBinary]() {return isBinary? "opBinary" : "opUnary";};
     auto getOpArgs = [](const std::string& s) { return std::string("string op : \"") + s + "\""; };
 
     bool customMangle = false;
@@ -1490,6 +1530,15 @@ std::tuple<std::string, std::string, bool> DlangBindGenerator::getOperatorName(c
         break;
     case OverloadedOperatorKind::OO_Pipe:
         funcName = arityStr(); opSign = getOpArgs("|");
+        break;
+    case OverloadedOperatorKind::OO_Tilde:
+        funcName = arityStr(); opSign = getOpArgs("~");
+        break;
+    case OverloadedOperatorKind::OO_MinusMinus:
+        funcName = arityStr(); opSign = getOpArgs("--");
+        break;
+    case OverloadedOperatorKind::OO_PlusPlus:
+        funcName = arityStr(); opSign = getOpArgs("++");
         break;
     case OverloadedOperatorKind::OO_Call:
         funcName = "opCall";
@@ -1538,6 +1587,9 @@ std::tuple<std::string, std::string, bool> DlangBindGenerator::getOperatorName(c
         break;
     case OverloadedOperatorKind::OO_AmpEqual:
         funcName = "opOpAssign"; opSign = getOpArgs("&");
+        break;
+    case OverloadedOperatorKind::OO_CaretEqual:
+        funcName = "opOpAssign"; opSign = getOpArgs("^");
         break;
     case OverloadedOperatorKind::OO_LessLessEqual:
         funcName = "opOpAssign"; opSign = getOpArgs("<<");

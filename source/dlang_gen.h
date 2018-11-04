@@ -134,7 +134,8 @@ private:
     // returns "C" or "C++" depending on settings
     std::string externAsString(bool isExternC = false) const;
     void getJoinedNS(const clang::DeclContext* decl, std::vector<std::string>& parts);
-    void printBases(const clang::CXXRecordDecl* decl);
+    // Writes comma separted inheritance list, returns non-virtual bases to be used with 'alias this'
+    std::vector<const clang::Decl*> printBases(const clang::CXXRecordDecl* decl);
     void methodIterate(const clang::CXXRecordDecl* decl);
     void fieldIterate(const clang::RecordDecl* decl);
     void innerDeclIterate(const clang::RecordDecl* decl);
