@@ -35,6 +35,12 @@ using namespace clang::driver;
 using namespace clang::tooling;
 
 
+auto ret0 = returnStmt(has(integerLiteral(equals(0))));
+bool DPrinterHelper_PointerReturn::handledStmt(clang::Stmt* E, llvm::raw_ostream& OS)
+{
+    return false;
+}
+
 namespace
 {
 
@@ -501,6 +507,21 @@ public:
         if (const auto *TE = dyn_cast<CXXThisExpr>(E))
             return TE->isImplicit();
         return false;
+    }
+
+    bool VisitImplicitCastExpr(ImplicitCastExpr *Node) {
+        // Be careful!
+        // Can't use dynamic cast here because RTTI is disabled for clang on Linux
+        if (Context && Helper && static_cast<DPrinterHelper_PointerReturn*>(Helper))
+        {
+            auto kind = Node->isNullPointerConstant(*const_cast<ASTContext*>(Context), Expr::NullPointerConstantValueDependence::NPC_NeverValueDependent);
+            if (kind != Expr::NullPointerConstantKind::NPCK_NotNull)
+            {
+                OS << "null";
+                return false;
+            }
+        }
+        return true;
     }
 
     bool VisitMemberExpr(MemberExpr *Node)

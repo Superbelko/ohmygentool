@@ -1370,11 +1370,12 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
         // write function body
         if (m->isInlined() && m->hasInlineBody() && !isDtor)
         {
-            auto writeMultilineExpr = [this, commentOut, ast](auto expr) {
+            auto writeMultilineExpr = [this, commentOut, ast](auto expr, bool ptrRet = false) {
                 std::string s;
                 llvm::raw_string_ostream os(s);
                 std::stringstream ss;
-                printPrettyD(expr, os, nullptr, *DlangBindGenerator::g_printPolicy, 0, ast);
+                DPrinterHelper_PointerReturn rp;
+                printPrettyD(expr, os, ptrRet ? &rp : nullptr, *DlangBindGenerator::g_printPolicy, 0, ast);
                 ss << os.str();
                 std::string line;
                 for (int i = 0; std::getline(ss, line); i++)
@@ -1427,7 +1428,7 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
             if (!isEmptyBody)
             {
                 // write body after initializer list
-                writeMultilineExpr(m->getBody());
+                writeMultilineExpr(m->getBody(), m->getReturnType()->isPointerType());
             }
 
             // close extra braces
@@ -1461,9 +1462,20 @@ void DlangBindGenerator::writeFnRuntimeArgs(const clang::FunctionDecl* fn)
 
         if (const auto defaultVal = fp->getDefaultArg())
         {
+            bool isNull = false;
+            if (fp->getType()->isPointerType())
+            {
+                auto nullkind = defaultVal->isNullPointerConstant(fn->getASTContext(), Expr::NullPointerConstantValueDependence::NPC_NeverValueDependent);
+                if (nullkind != Expr::NullPointerConstantKind::NPCK_NotNull)
+                    isNull = true;
+            }
+
             std::string s;
             llvm::raw_string_ostream os(s);
-            printPrettyD(defaultVal, os, nullptr, *DlangBindGenerator::g_printPolicy);
+            if (isNull)
+                os << "null";
+            else 
+                printPrettyD(defaultVal, os, nullptr, *DlangBindGenerator::g_printPolicy);
             out << " = " << os.str();
         }
 
@@ -1481,6 +1493,13 @@ void DlangBindGenerator::writeTemplateArgs(const clang::TemplateDecl* td)
         {
             auto nt = cast<NonTypeTemplateParmDecl>(tp);
             out << toDStyle(nt->getType()) << " ";
+            if (auto defaultVal = nt->getDefaultArgument())
+            {
+                std::string s;
+                llvm::raw_string_ostream os(s);
+                printPrettyD(defaultVal, os, nullptr, *DlangBindGenerator::g_printPolicy);
+                out << " = " << os.str();
+            }
         }
         out << tp->getName().str();
         if (tp != *(tplist->end() - 1))

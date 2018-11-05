@@ -63,6 +63,13 @@ void printPrettyD(const clang::CXXCtorInitializer *init, llvm::raw_ostream &OS, 
                      const clang::PrintingPolicy &Policy, unsigned Indentation = 0,
                      const clang::ASTContext *Context = nullptr);
 
+// Hacky marker class that is passed as printer helper, does nothing by itself
+class DPrinterHelper_PointerReturn : public clang::PrinterHelper
+{
+public:
+    virtual bool handledStmt(clang::Stmt* E, llvm::raw_ostream& OS);
+};
+
 
 class NamespacePolicy;
 class NamespacePolicy_StringList;
