@@ -214,6 +214,8 @@ class NamespacePolicy_StringList : public NamespacePolicy
 
 bool hasVirtualMethods(const RecordDecl* rd)
 {
+    if (!rd)
+        return false;
     if (!isa<CXXRecordDecl>(rd))
         return false;
 
@@ -848,12 +850,43 @@ std::string DlangBindGenerator::toDStyle(QualType type)
     }
     else if (type->isStructureOrClassType() || type->isEnumeralType() || type->isUnionType()) // special case for stripping enum|class|struct keyword
     {
-        // split on whitespace in between "class SomeClass*" and take the part on the right
-        auto str = type.getAsString(*DlangBindGenerator::g_printPolicy);
-        auto ws = str.find_first_of(' ', 0);
-        if (ws != std::string::npos)
+        std::string str;
+        if (auto rd = type->getAsRecordDecl())
         {
-            str = str.substr(ws + 1);
+            str = rd->getName().str();
+            #if 0
+            // this version will pick nested records skipping namespces,
+            // however the function doesn't have optional parameter yet 
+            // so we can't choose desired behaviour
+            std::vector<std::string> nestedDecl;
+            nestedDecl.push_back(rd->getName().str());
+            auto ctx = rd->getDeclContext();
+            while(!ctx->isTranslationUnit()) 
+            {
+                if (ctx->isRecord())
+                {
+                    auto r = cast<RecordDecl>(ctx);
+                    nestedDecl.push_back(r->getName().str());
+                }
+                ctx = ctx->getParent();
+            }
+            for(auto it = nestedDecl.rbegin(); it != nestedDecl.rend(); it++ )
+            {
+                if (it != nestedDecl.rbegin())
+                    str.append(".");
+                str.append(*it);
+            }
+            #endif
+        }
+        else 
+        {
+            // split on whitespace in between "class SomeClass*" and take the part on the right
+            str = type.getAsString(*DlangBindGenerator::g_printPolicy);
+            auto ws = str.find_first_of(' ', 0);
+            if (ws != std::string::npos)
+            {
+                str = str.substr(ws + 1);
+            }
         }
         res = str;
     }
