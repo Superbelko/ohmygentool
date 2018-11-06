@@ -1315,7 +1315,13 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
         if (m->isDefaulted())
             out << "// (default) ";
 
+        
+
+        bool possibleOverride = !(isCtor || isDtor) && m->size_overridden_methods() && m->getBody();
         bool commentOut = (!isVirtualDecl && isDefaultCtor) || idAssign;
+
+        if (!isVirtualDecl && possibleOverride)
+            commentOut = true;
         // default ctor for struct not allowed
         if (commentOut)
         {
@@ -1334,7 +1340,7 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
 
         out << getAccessStr(m->getAccess(), !isClass) << " ";
 
-        if (m->hasAttr<OverrideAttr>())
+        if (m->hasAttr<OverrideAttr>() || possibleOverride)
             out << "override ";
 
         if (isStatic)
@@ -1380,7 +1386,7 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
                 std::string line;
                 for (int i = 0; std::getline(ss, line); i++)
                 {
-                    if (i && commentOut) 
+                    if (commentOut) 
                         out << "//";
                     textReplaceArrowColon(line);
                     out << line << std::endl;
@@ -1414,8 +1420,8 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
                         continue;
                     if (auto member = init->getMember())
                     {
-                        if (commentOut)
-                            out << "//";
+                        //if (commentOut)
+                        //    out << "//";
                         //out << sanitizedIdentifier(member->getNameAsString()) << " = ";
                         writeMultilineExpr(init);
                     }
