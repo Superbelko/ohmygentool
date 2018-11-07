@@ -478,6 +478,9 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
         if (!(decl->isUnion() || decl->isTemplated()))
             out << "align(" << ti.Align / 8 << "):" << std::endl;
 #endif
+        // TODO: precise mix-in where needed on finalize step
+        //if (!isVirtual)
+        //    out << "mixin RvalueRef;" << std::endl;
         innerDeclIterate(decl);
         int baseid = 0;
         for (auto fakeBase : nonvirt)
@@ -1483,6 +1486,13 @@ void DlangBindGenerator::writeFnRuntimeArgs(const clang::FunctionDecl* fn)
             else 
                 printPrettyD(defaultVal, os, nullptr, *DlangBindGenerator::g_printPolicy);
             out << " = " << os.str();
+
+            // add rvalue-ref hack
+            if (fp->getType()->isReferenceType()) 
+            {
+                // TODO: skip on function calls
+                out << ".byRef ";
+            }
         }
 
         if (fp != *(fn->param_end() - 1))
