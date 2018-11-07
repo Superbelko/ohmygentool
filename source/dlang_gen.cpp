@@ -1053,6 +1053,14 @@ void DlangBindGenerator::innerDeclIterate(const clang::RecordDecl *decl)
             onStructOrClassEnter(d);
             onStructOrClassLeave(d);
         }
+        if (const auto m = llvm::dyn_cast<FunctionTemplateDecl>(it))
+        {
+            if (auto fn = m->getAsFunction())
+            {
+                out << getAccessStr(m->getAccess()) << " ";
+                onFunction(fn);
+            }
+        }
         // TODO: typedefs
     }
 }

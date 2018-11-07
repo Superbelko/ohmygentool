@@ -35,6 +35,10 @@ using namespace clang::driver;
 using namespace clang::tooling;
 
 
+template<typename TA>
+static void printDTemplateArgumentList(raw_ostream &OS, ArrayRef<TA> Args, const PrintingPolicy &Policy, bool SkipBrackets = false);
+
+
 auto ret0 = returnStmt(has(integerLiteral(equals(0))));
 bool DPrinterHelper_PointerReturn::handledStmt(clang::Stmt* E, llvm::raw_ostream& OS)
 {
@@ -551,8 +555,8 @@ public:
         OS <<  DlangBindGenerator::sanitizedIdentifier(
                 Node->getMemberNameInfo().getName().getAsString());
         // TODO: template args
-        //if (Node->hasExplicitTemplateArgs())
-        //    printTemplateArgumentList(OS, Node->template_arguments(), Policy);
+        if (Node->hasExplicitTemplateArgs())
+            printDTemplateArgumentList(OS, Node->template_arguments(), Policy);
 
         return false;
     }
@@ -689,8 +693,8 @@ public:
         //    OS << "template ";
         OS <<  DlangBindGenerator::sanitizedIdentifier(
                 Node->getNameInfo().getAsString());
-        //if (Node->hasExplicitTemplateArgs())
-        //    printTemplateArgumentList(OS, Node->template_arguments(), Policy);
+        if (Node->hasExplicitTemplateArgs())
+            printDTemplateArgumentList(OS, Node->template_arguments(), Policy);
         return true;
     }
 
@@ -813,8 +817,8 @@ public:
         //if (Node->hasTemplateKeyword())
         //    OS << "template ";
         OS << DlangBindGenerator::sanitizedIdentifier(Node->getMemberNameInfo().getAsString());
-        //if (Node->hasExplicitTemplateArgs())
-        //    printTemplateArgumentList(OS, Node->template_arguments(), Policy);
+        if (Node->hasExplicitTemplateArgs())
+            printDTemplateArgumentList(OS, Node->template_arguments(), Policy);
         return true;
     }
 
@@ -825,8 +829,8 @@ public:
         //if (Node->hasTemplateKeyword())
         //    OS << "template ";
         OS << DlangBindGenerator::sanitizedIdentifier(Node->getNameInfo().getAsString());
-        //if (Node->hasExplicitTemplateArgs())
-        //    printTemplateArgumentList(OS, Node->template_arguments(), Policy);
+        if (Node->hasExplicitTemplateArgs())
+            printDTemplateArgumentList(OS, Node->template_arguments(), Policy);
         return true;
     }
 
@@ -1063,6 +1067,47 @@ public:
 };
 } // namespace
 
+
+static
+const TemplateArgument &getArgument(const TemplateArgument &A) { return A; }
+
+static const TemplateArgument &getArgument(const TemplateArgumentLoc &A) {
+  return A.getArgument();
+}
+
+template <typename TA>
+static void printDTemplateArgumentList(raw_ostream &OS, ArrayRef<TA> Args,
+                                      const PrintingPolicy &Policy, bool SkipBrackets)
+{
+    if (!SkipBrackets)
+        OS << "!(";
+    bool FirstArg = true;
+    for (const auto &Arg : Args)
+    {
+        // Print the argument into a string.
+        SmallString<128> Buf;
+        llvm::raw_svector_ostream ArgOS(Buf);
+        const TemplateArgument &Argument = getArgument(Arg);
+        if (Argument.getKind() == TemplateArgument::Pack)
+        {
+            if (Argument.pack_size() && !FirstArg)
+                OS << ', ';
+            printDTemplateArgumentList(ArgOS, Argument.getPackAsArray(), Policy);
+        }
+        else
+        {
+            if (!FirstArg)
+                OS << ', ';
+            Argument.print(Policy, ArgOS);
+        }
+
+        OS << ArgOS.str();
+
+        FirstArg = false;
+    }
+    if (!SkipBrackets)
+        OS << ')';
+}
 
 void printPrettyD(const Stmt *stmt, raw_ostream &OS, PrinterHelper *Helper,
                      const PrintingPolicy &Policy, unsigned Indentation /*= 0*/,
