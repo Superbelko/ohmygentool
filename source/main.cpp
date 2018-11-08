@@ -24,6 +24,8 @@
 #include <utility>
 #include <list>
 #include <tuple>
+#include <regex>
+#include <cstdlib>
 
 #ifdef _WIN32
 #include <corecrt_wstdio.h>
@@ -333,6 +335,35 @@ bool filterExt(const std::string& ext)
 	return false;
 }
 
+// Find substring with special pattern in form $(VARIABLE_NAME)
+std::tuple<size_t, size_t> findPathVar(const std::string& path)
+{
+	std::regex e(R"(\$\(\w+\))");
+	std::smatch m;
+	std::regex_search(path, m, e);
+	return std::make_tuple(m.position(), m.begin() != m.end() ? m.begin()->length() : 0);
+}
+
+// Replaces substring with environment variable (always takes value before first separator)
+void replaceEnvVar(std::string& path)
+{
+#ifdef _WIN32
+	const char sep = ';';
+#else
+	const char sep = ':';
+#endif
+	auto [pos, len] = findPathVar(path);
+	if (len > 0)
+	{
+		// skips leading '$(' and closing ')'
+		if (auto env = std::getenv(path.substr(pos+2, len-3).c_str())) 
+		{
+			auto stop = std::find(env, env+strlen(env), sep);
+			path.replace(pos, len, stop == 0 ? env : std::string(env, stop));
+		}
+	}
+}
+
 // useful stuff
 //https://gist.github.com/kennytm/4178490 template instantiation from decl
 //https://stackoverflow.com/questions/40740604/how-do-i-get-the-mangled-name-of-a-nameddecl-in-clang name mangling
@@ -410,6 +441,13 @@ int main(int argc, const char **argv)
 		std::cout << "Error while reading JSON config." << std::endl;
 		return 1;
 	}
+
+	for (auto& p: input.paths)
+		replaceEnvVar(p);
+	for (auto& p: input.includes)
+		replaceEnvVar(p);
+	for (auto& p: input.systemIncludes)
+		replaceEnvVar(p);
 
 	clang::ast_matchers::MatchFinder Finder;
 
