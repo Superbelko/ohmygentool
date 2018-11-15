@@ -48,7 +48,7 @@ thread_local clang::PrintingPolicy *DlangBindGenerator::g_printPolicy;
 // D reserved keywords, possible overlaps from C/C++ sources
 std::vector<std::string> reservedIdentifiers = {
     "out", "ref", "version", "debug", "mixin", "with", "unittest", "typeof", "typeid", "super", "body",
-    "shared", "pure", "package", "module", "inout", "in", "import", "invariant", "immutable", "interface",
+    "shared", "pure", "package", "module", "inout", "in", "is", "import", "invariant", "immutable", "interface",
     "function", "delegate", "final", "export", "deprecated", "alias", "abstract", "synchronized",
     "byte", "ubyte", "uint", "ushort", "string"
 };
@@ -1057,6 +1057,9 @@ void DlangBindGenerator::innerDeclIterate(const clang::RecordDecl *decl)
         {
             if (auto fn = m->getAsFunction())
             {
+                // skip "problematic" methods and functions for now
+                if (!fn->getIdentifier())
+                    continue;
                 out << getAccessStr(m->getAccess()) << " ";
                 onFunction(fn);
             }

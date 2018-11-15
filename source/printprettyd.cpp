@@ -638,6 +638,14 @@ public:
             OS << Call->getDirectCallee()->getName();
         else 
             TraverseStmt(Call->getCallee());
+
+        auto f = Call->getDirectCallee()->getAsFunction();        
+        if (f && f->isTemplateInstantiation() 
+              && f->getTemplateSpecializationArgs())
+        {
+            printDTemplateArgumentList(OS, f->getTemplateSpecializationArgs()->asArray(), Policy);
+        }
+
         OS << "(";
         PrintCallArgs(Call);
         OS << ")";
@@ -1091,13 +1099,13 @@ static void printDTemplateArgumentList(raw_ostream &OS, ArrayRef<TA> Args,
         if (Argument.getKind() == TemplateArgument::Pack)
         {
             if (Argument.pack_size() && !FirstArg)
-                OS << ', ';
+                OS << ", ";
             printDTemplateArgumentList(ArgOS, Argument.getPackAsArray(), Policy);
         }
         else
         {
             if (!FirstArg)
-                OS << ', ';
+                OS << ", ";
             Argument.print(Policy, ArgOS);
         }
 
@@ -1106,7 +1114,7 @@ static void printDTemplateArgumentList(raw_ostream &OS, ArrayRef<TA> Args,
         FirstArg = false;
     }
     if (!SkipBrackets)
-        OS << ')';
+        OS << ")";
 }
 
 void printPrettyD(const Stmt *stmt, raw_ostream &OS, PrinterHelper *Helper,
