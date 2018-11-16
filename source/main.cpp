@@ -108,6 +108,13 @@ namespace ext {
 	AST_MATCHER(clang::FunctionDecl, isOverloadedOperator) {
 		return Node.isOverloadedOperator();
 	}
+	
+	AST_MATCHER(clang::Decl, topLinkageSpecDecl) {
+		if (Node.getKind() != Decl::Kind::LinkageSpec)
+			return false;
+		return Node.getDeclContext()->isTranslationUnit() 
+			|| Node.getDeclContext()->isNamespace();
+	}
 }
 
 
@@ -118,7 +125,8 @@ DeclarationMatcher recordDeclMatcher = recordDecl(
 	hasDeclContext( 
 		anyOf(
 			translationUnitDecl(), 
-			namespaceDecl()
+			namespaceDecl(),
+			ext::topLinkageSpecDecl()
 		)
 	)
 ).bind("recordDecl");
@@ -136,7 +144,8 @@ DeclarationMatcher typedefDeclMatcher = typedefDecl(
 	hasDeclContext( 
 		anyOf(
 			translationUnitDecl(), 
-			namespaceDecl()
+			namespaceDecl(),
+			ext::topLinkageSpecDecl()
 		)
 	)
 ).bind("typedefDecl");
@@ -156,7 +165,8 @@ DeclarationMatcher globalVarsMatcher = varDecl(
 	hasDeclContext( 
 		anyOf(
 			translationUnitDecl(), 
-			namespaceDecl()
+			namespaceDecl(),
+			ext::topLinkageSpecDecl()
 		)
 	), 
 	unless(anyOf(typedefNameDecl(), typedefDecl(), parmVarDecl()))
