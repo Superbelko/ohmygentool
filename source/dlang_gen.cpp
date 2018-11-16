@@ -189,6 +189,16 @@ void textReplaceArrowColon(std::string& in)
 }
 
 
+std::string intTypeForSize(unsigned bitWidth, bool signed_ = true)
+{
+    if (bitWidth == 8) return signed_? "byte" : "ubyte";
+    if (bitWidth == 16) return signed_? "short" : "ushort";
+    if (bitWidth == 32) return signed_? "int" : "uint";
+    if (bitWidth == 64) return signed_? "long" : "ulong";
+    return signed_? "int" : "uint";
+}
+
+
 class NamespacePolicy_StringList : public NamespacePolicy
 {
     DlangBindGenerator* gen;
@@ -449,20 +459,34 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
     std::vector<const clang::Decl*> nonvirt;
     if (cxxdecl)
     {
-        auto classTemplate = cxxdecl->getDescribedClassTemplate();
-		if (classTemplate) 
-			classTemplate = classTemplate->getCanonicalDecl(); //retrieve real decl
-		if (classTemplate)
+        TemplateDecl* tpd = nullptr;
+        const TemplateArgumentList* tparams = nullptr;
+        const ClassTemplateSpecializationDecl* tsd = nullptr;
+        if (isa<ClassTemplateSpecializationDecl>(decl))
+            tsd = cast<ClassTemplateSpecializationDecl>(decl);
+        if (tsd)
         {
-            if ( classTemplate->isThisDeclarationADefinition() ) // add only actual declarations
+            tparams = &tsd->getTemplateArgs();
+            tpd = tsd->getSpecializedTemplate();
+        }
+        else
+        {
+            tpd = cxxdecl->getDescribedClassTemplate();
+        }
+
+        if ( decl->isThisDeclarationADefinition() ) // add only actual declarations
+        {
+            if (tparams)
             {
-                const auto tparams = classTemplate->getTemplateParameters();
-                if (tparams)
-                {
-                    out << "(";
-                    writeTemplateArgs(classTemplate);
-                    out << ")";
-                }
+                out << "(";
+                writeTemplateArgs(tparams);
+                out << ")";
+            }
+            else if (tpd)
+            {
+                out << "(";
+                writeTemplateArgs(tpd);
+                out << ")";
             }
         }
         // adds list of base classes
@@ -1534,6 +1558,35 @@ void DlangBindGenerator::writeTemplateArgs(const clang::TemplateDecl* td)
     }
 }
 
+void DlangBindGenerator::writeTemplateArgs(const clang::TemplateArgumentList* ta)
+{
+    bool first = true;
+    for (const auto tp : ta->asArray())
+    {
+        auto tk = tp.getKind();
+        std::string s;
+        llvm::raw_string_ostream os(s);
+        switch(tk)
+        {
+            case TemplateArgument::ArgKind::Integral:
+                out << intTypeForSize(tp.getAsIntegral().getBitWidth()) << " T: ";
+                out << tp.getAsIntegral().toString(10);
+                break;
+            case TemplateArgument::ArgKind::Expression:
+                printPrettyD(tp.getAsExpr(), os, nullptr, *DlangBindGenerator::g_printPolicy);
+                out << s;
+                break;
+            case TemplateArgument::ArgKind::Type:
+                out << toDStyle(tp.getAsType());
+                break;
+            default: break;
+        }
+        if (first)
+            first = false;
+        else
+            out << ", ";
+    }
+}
 
 std::tuple<std::string, std::string> DlangBindGenerator::getFSPathPart(const std::string_view loc)
 {

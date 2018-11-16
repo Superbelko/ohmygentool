@@ -151,6 +151,7 @@ private:
     // Functions below are specific to functions 
     void writeFnRuntimeArgs(const clang::FunctionDecl* fn);
     void writeTemplateArgs(const clang::TemplateDecl* td);
+    void writeTemplateArgs(const clang::TemplateArgumentList* ta);
 
     // Get overloaded operator name & template args, such as { 'opBinary', 'string op:"+"'}
     static std::tuple<std::string, std::string, bool> getOperatorName(const clang::FunctionDecl* decl);
