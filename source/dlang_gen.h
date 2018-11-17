@@ -96,6 +96,7 @@ protected:
 	EnumDecls enumDecls;
     using MacroDefs = std::unordered_map<std::string, bool>;
     MacroDefs macroDefs;
+    int localAnonRecordId = 1; // specific to top records anonimous counter
     int globalAnonTypeId = 0; // used to deanonimize at global scope
 	int accumBitFieldWidth = 0; // accumulated width in bits, we need to round up to byte, short, int or long and split when necessary
     int mixinTemplateId = 0; // used to write unique id's for namespace hack

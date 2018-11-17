@@ -122,16 +122,18 @@ std::string merge(std::list<const clang::RecordDecl *> &q)
 
 
 // De-anonimize provided decl and all sub decls, will set generated identifier to the types
-void deanonimizeTypedef(clang::RecordDecl* decl, const std::string_view optName = std::string_view())
+void deanonimizeTypedef(clang::RecordDecl* decl, const std::string_view optName = std::string_view(), int* count = nullptr)
 {
     // TODO: This function is just ugly, refactor!
     int counter = 1; // will be appended to nested anonymous entries
+    if (!count)
+        count = &counter;
     if (!decl->getIdentifier())
     {
         if (optName.empty())
         {
-            auto newName = std::string("_anon").append(std::to_string(counter));
-            counter += 1;
+            auto newName = std::string("_anon").append(std::to_string(*count));
+            count += 1;
             const auto& newId = decl->getASTContext().Idents.get(newName);
             decl->setDeclName(DeclarationName(&newId));
         }
@@ -147,8 +149,8 @@ void deanonimizeTypedef(clang::RecordDecl* decl, const std::string_view optName 
         {
             if (!td->getIdentifier()) // no name, add some
             {
-                auto newName = std::string("_anon").append(std::to_string(counter));
-                counter += 1;
+                auto newName = std::string("_anon").append(std::to_string(*count));
+                *count += 1;
                 const auto& newId = td->getASTContext().Idents.get(newName);
                 td->setDeclName(DeclarationName(&newId));
             }
@@ -164,8 +166,8 @@ void deanonimizeTypedef(clang::RecordDecl* decl, const std::string_view optName 
         {
             if (!rec->getIdentifier())
             {
-                auto newName = std::string("_anon").append(std::to_string(counter));
-                counter += 1;
+                auto newName = std::string("_anon").append(std::to_string(*count));
+                *count += 1;
                 const auto& newId = rec->getASTContext().Idents.get(newName);
                 rec->setDeclName(DeclarationName(&newId));
             }
@@ -418,6 +420,12 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
         const auto tdd = decl->getTypeForDecl();
         if (!tdd)
             return;
+        if (!decl->isCompleteDefinition())
+        {
+            // write and close forward decl
+            out << "struct " << decl->getName().str() << ";" << std::endl;
+            return;
+        }
         ti = decl->getASTContext().getTypeInfo(decl->getTypeForDecl());
         if (ti.Width == 0 || ti.Align == 0)
             return;
@@ -442,17 +450,26 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
 
     if (classOrStructName.empty())
     {
-        globalAnonTypeId += 1;
-        deanonimizeTypedef(
-            const_cast<RecordDecl*>(decl), 
-            std::string("AnonType_").append(std::to_string(globalAnonTypeId))
-        );
-        classOrStructName = decl->getName().str();
+        if (auto td = decl->getTypedefNameForAnonDecl())
+        {
+            classOrStructName = td->getName().str();
+            const auto& newId = decl->getASTContext().Idents.get(td->getName());
+            const_cast<RecordDecl*>(decl)->setDeclName(DeclarationName(&newId));
+        }
+        else
+        {
+            globalAnonTypeId += 1;
+            deanonimizeTypedef(
+                const_cast<RecordDecl*>(decl), 
+                std::string("AnonType_").append(std::to_string(globalAnonTypeId))
+            );
+            classOrStructName = decl->getName().str();
+        }
     }
     else
     {
         // FIXME: OH NO!
-        deanonimizeTypedef(const_cast<RecordDecl*>(decl));
+        deanonimizeTypedef(const_cast<RecordDecl*>(decl), std::string_view(), &localAnonRecordId);
     }
 
     out << classOrStructName;
@@ -531,6 +548,8 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
 void DlangBindGenerator::onStructOrClassLeave(const clang::RecordDecl *decl)
 {
     declStack.pop_back();
+    if (declStack.empty())
+        localAnonRecordId = 1;
     out << std::endl;
 }
 
@@ -645,10 +664,19 @@ void DlangBindGenerator::onTypedef(const clang::TypedefDecl *decl)
 
     if (auto tdtype = decl->getUnderlyingType().getTypePtr())
     {
+        while(tdtype->isPointerType())
+            tdtype = tdtype->getPointeeType().getTypePtr();
+
         auto rd = tdtype->getAsRecordDecl();
-        if (rd && !rd->getIdentifier())
+        if (rd)
         {
-            deanonimizeTypedef(rd, typedefName);
+            if(!rd->getIdentifier())
+                deanonimizeTypedef(rd, typedefName);
+            else
+            {
+                const auto& newId = rd->getASTContext().Idents.get(typedefName);
+                rd->setDeclName(DeclarationName(&newId));
+            }
             onStructOrClassEnter(rd);
             onStructOrClassLeave(rd);
             // We're done here, but it also might be an option to append 
@@ -1088,7 +1116,11 @@ void DlangBindGenerator::innerDeclIterate(const clang::RecordDecl *decl)
                 onFunction(fn);
             }
         }
-        // TODO: typedefs
+        if (isa<TypedefDecl>(it))
+        {
+            const auto td = cast<TypedefDecl>(it);
+            onTypedef(td);
+        }
     }
 }
 
@@ -1178,13 +1210,23 @@ void DlangBindGenerator::fieldIterate(const clang::RecordDecl *decl)
             }
         }
 
-        //out << "    ";
+        auto fieldTypeStr = toDStyle(it->getType());
+        if (!it->getIdentifier())
+        {
+            if (fieldTypeStr.compare("_anon") != -1)
+            {
+                auto n = std::stoi(fieldTypeStr.substr(5));
+                const auto& newId = decl->getASTContext().Idents.get(std::string("a") + std::to_string(n) + "_");
+                const_cast<FieldDecl*>(it)->setDeclName(DeclarationName(&newId));
+            }
+        }
+
         if (bitfield)
         {
             IndentBlock _indent(out, 4);
             if (isPrevIsBitfield) // we are still on same line
                 out << "," << std::endl;
-            out << toDStyle(it->getType()) << ", ";
+            out << fieldTypeStr << ", ";
             out << "\"" << sanitizedIdentifier(it->getName().str()) << "\""
                 << ", ";
             out << bitwidthExpr;
@@ -1199,7 +1241,7 @@ void DlangBindGenerator::fieldIterate(const clang::RecordDecl *decl)
                     << " ";
 
             out << getAccessStr(it->getAccess(), !decl->isClass()) << " ";
-            out << toDStyle(it->getType()) << " ";
+            out << fieldTypeStr << " ";
             out << sanitizedIdentifier(it->getName().str()) << ";";
             out << std::endl;
         }
@@ -1606,7 +1648,7 @@ std::tuple<std::string, std::string> DlangBindGenerator::getFSPathPart(const std
     }
 
     if (loc.length() && path.empty())
-        path = loc.substr();
+        path = std::string(loc);
 
     std::error_code _;
     path = fs::canonical(path, _).string();
