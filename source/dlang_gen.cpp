@@ -145,6 +145,9 @@ void deanonimizeTypedef(clang::RecordDecl* decl, const std::string_view optName 
     }
     for(auto d : decl->decls())
     {
+        if (d == decl)
+            continue;
+
         if (auto td = llvm::dyn_cast<TypedefDecl>(d))
         {
             if (!td->getIdentifier()) // no name, add some
@@ -156,6 +159,8 @@ void deanonimizeTypedef(clang::RecordDecl* decl, const std::string_view optName 
             }
             if (auto tdtype = td->getUnderlyingType().getTypePtr())
             {
+                if (tdtype->isDependentType())
+                    continue;
                 if (auto rd = tdtype->getAsRecordDecl() )
                 {
                     deanonimizeTypedef(rd);

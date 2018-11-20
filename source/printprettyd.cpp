@@ -518,7 +518,8 @@ public:
         // Can't use dynamic cast here because RTTI is disabled for clang on Linux
         if (Context && Helper && static_cast<DPrinterHelper_PointerReturn*>(Helper))
         {
-            auto kind = Node->isNullPointerConstant(*const_cast<ASTContext*>(Context), Expr::NullPointerConstantValueDependence::NPC_NeverValueDependent);
+            // This needs to be handled somehow, forcing dependent types to be not null is not right
+            auto kind = Node->isNullPointerConstant(*const_cast<ASTContext*>(Context), Expr::NullPointerConstantValueDependence::NPC_ValueDependentIsNotNull);
             if (kind != Expr::NullPointerConstantKind::NPCK_NotNull)
             {
                 OS << "null";
@@ -639,7 +640,9 @@ public:
         else 
             TraverseStmt(Call->getCallee());
 
-        auto f = Call->getDirectCallee()->getAsFunction();        
+        const FunctionDecl* f = Call->getDirectCallee();
+        if(f) 
+            f = f->getAsFunction();
         if (f && f->isTemplateInstantiation() 
               && f->getTemplateSpecializationArgs())
         {
