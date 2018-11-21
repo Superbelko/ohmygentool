@@ -196,13 +196,22 @@ public:
         return false;
     }
 
-    bool VisitDeclStmt(DeclStmt* Node)
+    void printRawDeclStmt(DeclStmt* Node)
     {
+        const auto len = std::distance(Node->decl_begin(), Node->decl_end());
+        auto* last = *(Node->decl_end() - 1);
         for(auto* d : Node->decls())
         {
             TraverseDecl(d);
-            //OS << ";";
+            if (len > 1 && d != last)
+                OS << "; ";
         }
+    }
+
+    bool VisitDeclStmt(DeclStmt* Node)
+    {
+        printRawDeclStmt(Node);
+        OS << ";";
         return false;
     }
 
@@ -230,7 +239,7 @@ public:
         {
             //Indent();
             TraverseStmt(I);
-            //if (I && isa<Expr>(I))
+            if (I && isa<Expr>(I))
                 OS << ";"; // normally after Expr's only
             OS << '\n';
         }
@@ -248,7 +257,7 @@ public:
             OS << " ";
             TraverseStmt(Node->getRetValue());
         }
-        //OS << ";";
+        OS << ";";
         //if (Policy.IncludeNewlines) OS << "\n";
         return false;
     }
@@ -291,6 +300,8 @@ public:
         {
             OS << '\n';
             TraverseStmt(If->getThen());
+            if (isa<Expr>(If->getThen()))
+                OS << ";\n";
             //if (If->getElse())
                 //Indent();
         }
@@ -314,6 +325,8 @@ public:
             {
                 OS << '\n';
                 TraverseStmt(If->getElse());
+                if (isa<Expr>(If->getElse()))
+                    OS << ";\n";
             }
         }
         return false;
@@ -332,8 +345,9 @@ public:
         }
         #endif
         OS << ":\n";
-
         TraverseStmt(Node->getSubStmt());
+        if (isa<Expr>(Node->getSubStmt()))
+            OS << ";";
         return false;
     }
 
@@ -404,7 +418,7 @@ public:
         if (Node->getInit())
         {
             if (auto *DS = dyn_cast<DeclStmt>(Node->getInit()))
-                VisitDeclStmt(const_cast<DeclStmt*>(DS));
+                printRawDeclStmt(const_cast<DeclStmt*>(DS));
             else
                 TraverseStmt(cast<Expr>(Node->getInit()));
         }
