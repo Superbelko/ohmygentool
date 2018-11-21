@@ -163,7 +163,8 @@ public:
             OS << "__gshared static ";
 
         //printDeclType(T, D->getName());
-        OS << DlangBindGenerator::toDStyle(T) << " " << DlangBindGenerator::sanitizedIdentifier(D->getName());
+        auto typeString = DlangBindGenerator::toDStyle(T);
+        OS << typeString << " " << DlangBindGenerator::sanitizedIdentifier(D->getName());
         Expr *Init = D->getInit();
         if (!Policy.SuppressInitializers && Init)
         {
@@ -181,7 +182,7 @@ public:
             if (!ImplicitInit)
             {
                 if ((D->getInitStyle() == VarDecl::CallInit) && !isa<ParenListExpr>(Init))
-                    OS << "(";
+                    OS << " = " << typeString << "("; // D doesn't have C++ ctor call syntax for variables
                 else if (D->getInitStyle() == VarDecl::CInit)
                 {
                     OS << " = ";
