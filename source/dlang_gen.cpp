@@ -1452,6 +1452,9 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
         writeFnRuntimeArgs(m);
         out << ")";
 
+        if (m->isConst())
+            out << " const ";
+
         if (nogc) 
             out << " @nogc ";
 
