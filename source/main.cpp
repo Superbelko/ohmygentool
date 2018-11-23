@@ -321,6 +321,14 @@ std::tuple<InputOptions, OutputOptions, bool> readJSON(const std::string_view da
 		if (nogc)
 			outopts.extras.push_back("attr-nogc");
 	}
+
+	auto opt_refs = output.FindMember("no-param-refs");
+	if (opt_refs != output.MemberEnd())
+	{
+		auto val = attrnogc->value.GetBool();
+		if (val)
+			outopts.extras.push_back("no-param-refs");
+	}
 	
 	return std::make_tuple(inopts, outopts, res);
 }

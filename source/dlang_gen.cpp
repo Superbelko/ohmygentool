@@ -196,6 +196,15 @@ void textReplaceArrowColon(std::string& in)
 }
 
 
+std::string stripRefFromParam(const std::string& s) 
+{
+    auto p = s.find("ref ");
+    if (p == 0)
+        return std::string(s).replace(0, 4, "/*ref*/ ");
+    return s;
+}
+
+
 std::string intTypeForSize(unsigned bitWidth, bool signed_ = true)
 {
     if (bitWidth == 8) return signed_? "byte" : "ubyte";
@@ -277,6 +286,8 @@ void DlangBindGenerator::setOptions(const InputOptions *inOpt, const OutputOptio
         fileOut.open(outOpt->path);
         if (std::find(outOpt->extras.begin(), outOpt->extras.end(), "attr-nogc") != outOpt->extras.end())
             nogc = true;
+        if (std::find(outOpt->extras.begin(), outOpt->extras.end(), "no-param-refs") != outOpt->extras.end())
+            stripRefParam = false;
 
         // TODO: select valid policy here
         //nsPolicy.reset(new NamespacePolicy_StringList());
@@ -1549,10 +1560,16 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
 
 void DlangBindGenerator::writeFnRuntimeArgs(const clang::FunctionDecl* fn)
 {
+    bool inlined = fn->getBody() && fn->isInlined();
+    bool noRefs = inlined && stripRefParam;
     for (const auto fp : fn->parameters())
     {
         const auto typeStr = toDStyle(fp->getType());
-        out << typeStr << " " << sanitizedIdentifier(fp->getName().str());
+        if (noRefs)
+            out << stripRefFromParam(typeStr);
+        else
+            out << typeStr;
+        out << " " << sanitizedIdentifier(fp->getName().str());
 
         if (const auto defaultVal = fp->getDefaultArg())
         {
