@@ -1613,6 +1613,14 @@ void DlangBindGenerator::writeFnRuntimeArgs(const clang::FunctionDecl* fn)
         if (fp != *(fn->param_end() - 1))
             out << ", ";
     }
+
+    if (fn->isVariadic())
+    {
+        if (fn->getNumParams())
+            out << ", ";
+        out << "...";
+    }
+
 }
 
 void DlangBindGenerator::writeTemplateArgs(const clang::TemplateDecl* td)
