@@ -310,6 +310,11 @@ void DlangBindGenerator::prepare()
 
 void DlangBindGenerator::finalize()
 {
+    for(auto f : forwardTypes)
+    {
+        if (f.second)
+            out << "struct " << f.first << ";" << std::endl;
+    }
 }
 
 void DlangBindGenerator::onMacroDefine(const clang::Token* name, const clang::MacroDirective* macro)
@@ -416,6 +421,18 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
     classOrStructName = decl->getName().str();
     finalTypeName = merge(declStack).append(classOrStructName);
     declStack.push_back(decl);
+
+    bool forwardDecl = decl->getBraceRange().isInvalid();
+    if (forwardDecl)
+        forwardTypes.emplace(std::make_pair(classOrStructName, true));
+
+    if (auto fw = forwardTypes.find(classOrStructName); fw != forwardTypes.end() && fw->second == true)
+    {
+        fw->second = forwardDecl;
+    }
+
+    if (forwardDecl)
+        return;
 
     if (!addType(decl, storedTypes))
         return;

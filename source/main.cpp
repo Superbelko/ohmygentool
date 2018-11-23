@@ -121,7 +121,7 @@ namespace ext {
 
 // walk on all struct/class/unions that are found on top level or in namespaces
 DeclarationMatcher recordDeclMatcher = recordDecl(
-	isDefinition(), 
+	//isDefinition(), 
 	hasDeclContext( 
 		anyOf(
 			translationUnitDecl(), 
@@ -222,8 +222,8 @@ void RecordDeclMatcher<T>::run(const MatchFinder::MatchResult &Result)
 	}
 	else if (st)
 	{
-		if (!st->isCompleteDefinition())
-			return;
+		//if (!st->isCompleteDefinition())
+		//	return;
 
 
 		if (st->isClass() || st->isStruct())
