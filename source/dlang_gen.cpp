@@ -1524,6 +1524,19 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
                         //out << sanitizedIdentifier(member->getNameAsString()) << " = ";
                         writeMultilineExpr(init);
                     }
+                    if (init->isBaseInitializer() && hasInitializerList)
+                    {
+                        // TODO: modify writeMultilineExpr() to not insert newline at the end and use it instead of raw printing
+                        if (commentOut)
+                            out << "//";
+                        out << "super(";
+                        std::string s;
+                        llvm::raw_string_ostream os(s);
+                        printPrettyD(init->getInit(), os, nullptr, *DlangBindGenerator::g_printPolicy, 0, ast);
+                        os.flush();
+                        out << s;
+                        out << ");" << std::endl;
+                    }
                 }
 
                 if (hasInitializerList && !isEmptyBody)
