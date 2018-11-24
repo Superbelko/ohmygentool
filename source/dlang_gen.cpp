@@ -163,6 +163,8 @@ void deanonimizeTypedef(clang::RecordDecl* decl, const std::string_view optName 
                     continue;
                 if (auto rd = tdtype->getAsRecordDecl() )
                 {
+                    if (isa<ClassTemplateSpecializationDecl>(rd))
+                        continue;
                     deanonimizeTypedef(rd);
                 }
             }
@@ -1609,7 +1611,9 @@ void DlangBindGenerator::writeFnRuntimeArgs(const clang::FunctionDecl* fn)
             out << typeStr;
         out << " " << sanitizedIdentifier(fp->getName().str());
 
-        if (const auto defaultVal = fp->getDefaultArg())
+        bool isdefaultAvail = !(fp->hasUninstantiatedDefaultArg() || fp->hasUnparsedDefaultArg());
+        if (isdefaultAvail)
+        if (const auto defaultVal = fp->getDefaultArg()) 
         {
             bool isNull = false;
             if (fp->getType()->isPointerType())
