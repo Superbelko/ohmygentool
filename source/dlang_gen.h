@@ -102,6 +102,7 @@ protected:
     int globalAnonTypeId = 0; // used to deanonimize at global scope
 	int accumBitFieldWidth = 0; // accumulated width in bits, we need to round up to byte, short, int or long and split when necessary
     int mixinTemplateId = 0; // used to write unique id's for namespace hack
+    bool handledClassDecl = false; // true if we did written decl body
 	bool isPrevIsBitfield = false; // was last field is a bitfield? (needed to split up and pad)
     bool cppIsDefault = true;
     bool nogc = false;

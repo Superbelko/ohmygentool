@@ -436,6 +436,8 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
 
     if (!addType(decl, storedTypes))
         return;
+
+    handledClassDecl = true;
     
     const bool hasNamespace = decl->getDeclContext()->isNamespace();
     const auto externStr = externAsString(decl->getDeclContext()->isExternCContext());
@@ -581,9 +583,15 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
 void DlangBindGenerator::onStructOrClassLeave(const clang::RecordDecl *decl)
 {
     declStack.pop_back();
+
     if (declStack.empty())
         localAnonRecordId = 1;
-    out << std::endl;
+
+    if (handledClassDecl)
+        out << std::endl 
+            << std::endl;
+
+    handledClassDecl = false;
 }
 
 
