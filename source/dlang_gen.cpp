@@ -332,6 +332,10 @@ void DlangBindGenerator::onMacroDefine(const clang::Token* name, const clang::Ma
 
     if (auto mi = macro->getMacroInfo())
     {
+        static auto isSignTok = [](tok::TokenKind k) { 
+            return k == clang::tok::minus || k == clang::tok::plus; 
+        };
+
         if (mi->isUsedForHeaderGuard() || mi->getNumTokens() == 0)
             return;
         
@@ -343,12 +347,12 @@ void DlangBindGenerator::onMacroDefine(const clang::Token* name, const clang::Ma
             return;
         else macroDefs.insert(std::make_pair(id.str(), true));
 
-        // indicates that macro probably a simple value staring with minus
-        bool tokWithMinus = mi->getNumTokens() == 2 && mi->getReplacementToken(0).getKind() == clang::tok::minus;
+        // indicates that macro probably a simple value staring with minus or plus
+        bool tokWithSign = mi->getNumTokens() == 2 && isSignTok(mi->getReplacementToken(0).getKind());
         bool prevHash = false; // is the last token was a '#'
         // this measure disallows macros that possibly expands into hundreds of lines
         // it is not accurate in any way, but there is no better way to detect such cases
-        if (mi->getNumTokens() == 1 || tokWithMinus)
+        if (mi->getNumTokens() == 1 || tokWithSign)
         {
             // Write commented out macro body if it is function-like
             if (mi->getNumParams())
