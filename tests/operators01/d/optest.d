@@ -39,7 +39,7 @@ unittest
 	Test a,b;
 	~a;
 	assert(a.isBinary == false && strcmp(cast(char*)&a.opKind[0], "~")==0);
-	a.op_unot(); // !a
+	a.op_not(); // !a
 	assert(a.isBinary == false && strcmp(cast(char*)&a.opKind[0], "!")==0);
 	a--;
 	assert(a.isBinary == false && strcmp(cast(char*)&a.opKind[0], "--")==0);

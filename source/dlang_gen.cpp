@@ -1417,7 +1417,9 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
 
             // Get and recombine name with template args (if any)
             auto [name, templatedOp, customMangle_] = getOperatorName(m);
-            funcName = name + "(" + templatedOp + ")";
+            funcName = name;
+            if (!templatedOp.empty()) 
+                funcName.append("(" + templatedOp + ")");
             customMangle = customMangle_;
         }
 
@@ -1426,7 +1428,10 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
             // due to many little details unfortunately it's not there (yet)
             if (ast->getLangOpts().isCompatibleWithMSVC(LangOptions::MSVC2015))
             {
-                const auto pos = funcName.find('(');
+                auto pos = funcName.find('(');
+                if (pos == std::string::npos)
+                    pos = funcName.length();
+
                 out << "@pyExtract(\"" 
                     <<     decl->getNameAsString() << "::" << m->getNameAsString()
                     << "\")" << "   pragma(mangle, " << "nsgen."
@@ -1873,6 +1878,18 @@ std::tuple<std::string, std::string, bool> DlangBindGenerator::getOperatorName(c
         break;
     case OverloadedOperatorKind::OO_Arrow:
         funcName = "opUnary"; opSign = getOpArgs("->");
+        break;
+    case OverloadedOperatorKind::OO_New:
+        funcName = "op_new"; customMangle = true;
+        break;
+    case OverloadedOperatorKind::OO_Array_New:
+        funcName = "op_newArr"; customMangle = true;
+        break;
+    case OverloadedOperatorKind::OO_Delete:
+        funcName = "op_delete"; customMangle = true;
+        break;
+    case OverloadedOperatorKind::OO_Array_Delete:
+        funcName = "op_deleteArr"; customMangle = true;
         break;
     default:
         funcName = "op"; opSign = getOperatorSpelling(op);
