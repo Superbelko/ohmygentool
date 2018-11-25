@@ -1326,7 +1326,7 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
 {
     clang::ASTContext *ast = &decl->getASTContext();
     std::unique_ptr<MangleContext> mangleCtx;
-    if (ast->getTargetInfo().getTargetOpts().Triple.compare("windows") != std::string::npos)
+    if (ast->getTargetInfo().getTargetOpts().Triple.find("windows") != std::string::npos)
         mangleCtx.reset(clang::MicrosoftMangleContext::create(*ast, ast->getDiagnostics()));
     else
         mangleCtx.reset(clang::ItaniumMangleContext::create(*ast, ast->getDiagnostics()));
