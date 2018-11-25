@@ -263,6 +263,13 @@ public:
         return false;
     }
 
+    bool VisitLabelStmt(LabelStmt *Node) 
+    {
+        OS << Node->getName() << ":\n";
+        //TraverseStmt(Node->getSubStmt());
+        return true;
+    }
+
     bool VisitGotoStmt(GotoStmt *Node) 
     {
         OS << "goto " << Node->getLabel()->getName() << ";\n";
