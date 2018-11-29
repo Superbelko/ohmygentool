@@ -20,11 +20,11 @@ Merely a ~~simple script~~ tool for parsing C/C++ source files based on clang co
 * Does de-anonimizing for structs and unions for D target
 
 ##### Limitations
-* MS C++ compiler handles "someType * const" function parameters differently, requires mangling override, planned
+* MS C++ compiler handles "someType * const" (const pointer-to-non const) function parameters differently, requires mangling override, planned
 * Operator precedence order is not converted, one should validate the formulas after conversion
 * C++ move and copy constructors are not handled properly yet
 * Multiple inheritance is not handled yet
-* Does not detects "virtual" requirements to filter struct vs class usage, planned
+* "virtual" detection to filter struct vs class usage is not smart enough
 * Does limited inline functions conversion
 * Preprocessor stuff are completely invisible to this tool *(see[1])*, what this means in practice - you will see a lot of garbage from expanded macro, such as ```(void(0));```
 * Any non-trivial code will require manual adjustments, and sometimes even trivial code as well
@@ -33,7 +33,7 @@ Merely a ~~simple script~~ tool for parsing C/C++ source files based on clang co
 * This list may grow over time
 * Does not makes coffee
 
-[1] - *It operates on AST level, which is done AFTER preprocessing stage, there might be some ways of doing preprocessor stage as well, however I haven't even attempted this yet.*
+[1] - *It operates on AST level, which is done AFTER preprocessing stage, and it seems there is no way to modify such stuff without writting temp copy and mix these two passes.*
 
 ### **Note:**
 This tool is just a personal script for automating my daily binding making process. It may contain bugs, vulnerabilities, security holes, or holes. Use of this software may cause cancer *(whatever this means)*, and/or your hamster's death, if you does not have a hamster it will summon one from another dimension and then kill it. 
