@@ -521,7 +521,6 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
     }
     else
     {
-        // FIXME: OH NO!
         deanonimizeTypedef(const_cast<RecordDecl*>(decl), std::string_view(), &localAnonRecordId);
     }
 
@@ -682,15 +681,6 @@ void DlangBindGenerator::onFunction(const clang::FunctionDecl *decl)
         {
             out << "(";
             writeTemplateArgs(ftd);
-            /*
-            const auto tplist = ftd->getTemplateParameters();
-            for (const auto tp : *tplist)
-            {
-                out << tp->getName().str();
-                if (tp != *(tplist->end() - 1))
-                    out << ", ";
-            }
-            */
             out << ")";
         }
     }
@@ -783,34 +773,10 @@ void DlangBindGenerator::onGlobalVar(const clang::VarDecl *decl)
         llvm::raw_string_ostream os(s);
         printPrettyD(init, os, nullptr, *DlangBindGenerator::g_printPolicy);
         out << " = ";
-        // if (decl->getType()->isFloatingType())
-        //     out << _adjustVarInit(os.str());
-        // else
-        //     out << os.str();
         out << os.str();
     }
     out << ";";
     out << std::endl;
-}
-
-
-// adjust initializer for D, for example 50.F -> 50.0f
-std::string DlangBindGenerator::_adjustVarInit(const std::string &e)
-{
-    if (e.length()==0)
-      return e;
-
-    std::string res = e;
-    if (e.rfind(".F") != std::string::npos)
-    {
-        res.replace(e.length() - 2, 3, ".0f");
-    }
-    else if (res.at(res.length() - 1) == 'F')
-    {
-        res.replace(res.length() - 1, 1, "f");
-    }
-
-    return res;
 }
 
 
@@ -1455,7 +1421,7 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
                           << std::endl;
             }
             
-            // due to many little details unfortunately it's not there (yet)
+            // TODO: clang 7 seems to be ok now, implement this
             if (ast->getLangOpts().isCompatibleWithMSVC(LangOptions::MSVC2015))
             {
                 out << "@pyExtract(\"" 

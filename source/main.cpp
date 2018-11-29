@@ -2,16 +2,6 @@
 #pragma warning(push)
 #pragma warning( disable: 4146 4996 )
 
-// CURRENT PROBLEMS & TO-DO LIST:
-// - [REFACTOR] unify method/freefunc handling
-// - [REFACTOR] universal indentation stack for "out" printer
-// - [FEATURE] operator overload handling
-// - [FEATURE] move ctor skip? "MyClass(MyClass&& other);" (@disable private postblit?)
-// - [FEATURE] fields default initializers
-// - [FEATURE] bit fields splitting 
-// - [FEATURE] move away from eager writting, required for proper handling C style enum - typedef enum {wutever1, wutever2} enumName;
-// - replace -> and :: with dot, initializer expr with macro results in <null epxr>, 
-
 #include <memory>
 #include <iostream>
 #include <ostream>
@@ -35,7 +25,6 @@
 
 
 #include "rapidjson/document.h"
-//#include <clang-c/Index.h>
 #include "llvm/ADT/ArrayRef.h"
 #include "clang/AST/AST.h"
 #include "clang/AST/ASTConsumer.h"
@@ -54,7 +43,6 @@
 #include "clang/Parse/ParseAST.h"
 #include "clang/CodeGen/CodeGenAction.h"
 #include "clang/Lex/PreprocessorOptions.h"
-//#include "clang/Tooling/Core/QualTypeNames.h" // fully qualified template args lookup 
 #include "llvm/Support/raw_ostream.h"
 
 
@@ -121,7 +109,6 @@ namespace ext {
 
 // walk on all struct/class/unions that are found on top level or in namespaces
 DeclarationMatcher recordDeclMatcher = recordDecl(
-	//isDefinition(), 
 	hasDeclContext( 
 		anyOf(
 			translationUnitDecl(), 
@@ -222,10 +209,6 @@ void RecordDeclMatcher<T>::run(const MatchFinder::MatchResult &Result)
 	}
 	else if (st)
 	{
-		//if (!st->isCompleteDefinition())
-		//	return;
-
-
 		if (st->isClass() || st->isStruct())
 		{
 			isClass = true;
@@ -390,9 +373,6 @@ void replaceEnvVar(std::string& path)
 	}
 }
 
-// useful stuff
-//https://gist.github.com/kennytm/4178490 template instantiation from decl
-//https://stackoverflow.com/questions/40740604/how-do-i-get-the-mangled-name-of-a-nameddecl-in-clang name mangling
 
 void llvmOnError(void *user_data, const std::string& reason, bool gen_crash_diag)
 {
@@ -524,13 +504,13 @@ int main(int argc, const char **argv)
 		langOptions.RTTI = 0;
 		langOptions.DoubleSquareBracketAttributes = 1;
 		//#if defined(_MSC_VER)
-		langOptions.MSCompatibilityVersion = LangOptions::MSVCMajorVersion::MSVC2015;
+		//langOptions.MSCompatibilityVersion = LangOptions::MSVCMajorVersion::MSVC2015;
 		//langOptions.MSCompatibilityVersion = 19;
 		//langOptions.MicrosoftExt = 1;
-		langOptions.MSVCCompat = !isCpp;
+		//langOptions.MSVCCompat = !isCpp;
 		//langOptions.MSBitfields = 1;
 		langOptions.DeclSpecKeyword = 1;
-		langOptions.DelayedTemplateParsing = 1; // MSVC parses templates at the time of actual use
+		//langOptions.DelayedTemplateParsing = 1; // MSVC parses templates at the time of actual use
 		//#endif
 		
 		if (DlangBindGenerator::g_printPolicy)
