@@ -70,7 +70,7 @@ namespace fs = std::experimental::filesystem;
 
 
 static constexpr char* HELP_MSG = 
-R"(Oh My Gentool - v0.0.1
+R"(Oh My Gentool - v0.0.2
 Generates D bindings from C/C++ code
 
 USAGE:
