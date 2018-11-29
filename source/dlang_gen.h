@@ -84,6 +84,7 @@ protected:
     std::unique_ptr<NamespacePolicy> nsPolicy;
     clang::SourceManager* SourceMgr;
 	std::ofstream fileOut;
+    std::ofstream mangleOut;
 	OutStreamHelper out = OutStreamHelper(nullptr/*&std::cout*/, &fileOut);
 	std::string classOrStructName;
 	std::string finalTypeName;

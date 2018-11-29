@@ -240,6 +240,17 @@ class NamespacePolicy_StringList : public NamespacePolicy
 };
 
 
+void nsfileOpen(const std::string_view path, std::ofstream& file)
+{
+    fs::path p(path);
+    p.replace_extension("");
+    auto name = p.filename().string() + "_ns";
+    p.replace_filename(name);
+    p.replace_extension(".d");
+    file.open(p.string());
+}
+
+
 bool hasVirtualMethods(const RecordDecl* rd)
 {
     if (!rd)
@@ -286,6 +297,7 @@ void DlangBindGenerator::setOptions(const InputOptions *inOpt, const OutputOptio
         if (fileOut.is_open())
             fileOut.close();
         fileOut.open(outOpt->path);
+        nsfileOpen(outOpt->path, mangleOut);
         if (std::find(outOpt->extras.begin(), outOpt->extras.end(), "attr-nogc") != outOpt->extras.end())
             nogc = true;
         if (std::find(outOpt->extras.begin(), outOpt->extras.end(), "no-param-refs") != outOpt->extras.end())
@@ -1385,10 +1397,15 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
                 noRetType = true;
                 isDtor = true;
             }
-            else if (!m->isTemplated())
+            if (!(decl->isTemplated() || m->isTemplated()))
             {
                 llvm::raw_string_ostream ostream(mangledName);
-                mangleCtx->mangleName(m, ostream);
+                if (isCtor)
+                    mangleCtx->mangleCXXCtor(cast<CXXConstructorDecl>(m), CXXCtorType::Ctor_Complete, ostream);
+                else if (isDtor)
+                    mangleCtx->mangleCXXDtor(cast<CXXDestructorDecl>(m), CXXDtorType::Dtor_Complete, ostream);
+                else
+                    mangleCtx->mangleName(m, ostream);
                 ostream.flush();
             }
         }
@@ -1423,15 +1440,24 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
             customMangle = customMangle_;
         }
 
-        if (customMangle)
+        if (customMangle && !(decl->isTemplated() || m->isTemplated()))
         {
+            auto pos = funcName.find('(');
+            if (pos == std::string::npos)
+                pos = funcName.length();
+
+            if (mangleOut.is_open())
+            {
+                mangleOut << "pragma(mangle, \"" << mangledName << "\")" << std::endl;
+                mangleOut << "void "
+                          << decl->getNameAsString() << "_" << std::string_view(funcName.data(), pos)
+                          << "();"
+                          << std::endl;
+            }
+            
             // due to many little details unfortunately it's not there (yet)
             if (ast->getLangOpts().isCompatibleWithMSVC(LangOptions::MSVC2015))
             {
-                auto pos = funcName.find('(');
-                if (pos == std::string::npos)
-                    pos = funcName.length();
-
                 out << "@pyExtract(\"" 
                     <<     decl->getNameAsString() << "::" << m->getNameAsString()
                     << "\")" << "   pragma(mangle, " << "nsgen."
