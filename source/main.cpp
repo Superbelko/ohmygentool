@@ -272,22 +272,30 @@ void _readJSONArrayMember(decltype(InputOptions::paths)& arr, const rapidjson::V
 		for (const auto& e : it->value.GetArray())
 			arr.push_back(std::string(e.GetString()));
 	else 
-		throw std::runtime_error("Member not found");
+		throw std::runtime_error("Member '" + std::string(member) + "' not found");
 }
 
 #include <cctype> // std::tolower
-std::tuple<InputOptions, OutputOptions, bool> readJSON(const std::string_view data)
+std::tuple<InputOptions, OutputOptions> readJSON(const std::string_view data)
 {
 	static constexpr auto parserFlags = rapidjson::kParseTrailingCommasFlag | rapidjson::kParseCommentsFlag;
 	static const std::vector<std::string> targets = {"d2", "d", "dlang"};
 	InputOptions inopts;
 	OutputOptions outopts;
-	bool res = true;
 	rapidjson::Document document;
 	auto r = document.Parse<parserFlags>(data.data()).HasParseError();
 	if (r) throw std::runtime_error("Malformed JSON");
+	
+	if (!document.IsObject())
+		throw std::runtime_error("JSON root expected to be an object");
+
+	if (!(document.HasMember("input") && document.HasMember("output")))
+		throw std::runtime_error("JSON config expected to have 'input' and 'output' objects");
 
 	const auto& input = document["input"];
+
+	if (!input.HasMember("std"))
+		throw std::runtime_error("'input' expected to have 'std' property");
 	inopts.standard = std::string(input["std"].GetString());
 
 	_readJSONArrayMember(inopts.paths, input, "paths");
@@ -330,7 +338,7 @@ std::tuple<InputOptions, OutputOptions, bool> readJSON(const std::string_view da
 			outopts.extras.push_back("no-param-refs");
 	}
 	
-	return std::make_tuple(inopts, outopts, res);
+	return std::make_tuple(inopts, outopts);
 }
 
 std::string readFile(const std::string_view path)
@@ -453,10 +461,17 @@ int main(int argc, const char **argv)
 		return 1;
 	}
 
-	auto [input, output, res] = readJSON(readFile(path));
-	if (!res) 
+	bool res = false;
+	gentool::InputOptions input;
+	gentool::OutputOptions output;
+	
+	try 
 	{
-		std::cout << "Error while reading JSON config." << std::endl;
+		std::tie(input, output) = readJSON(readFile(path));
+	}
+	catch (const std::runtime_error& err)
+	{
+		std::cout << "ERROR: " << err.what() << std::endl;
 		return 1;
 	}
 
