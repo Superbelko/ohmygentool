@@ -494,12 +494,12 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
         isDerived = true;
 
     bool isVirtual = hasVirtualMethods(decl);
-    if (!isVirtual)
-        out << "struct ";
+    if (isVirtual)
+        out << "class ";
     else if (decl->isUnion())
         out << "union ";
-    else //if (decl->isClass() || isDerived)
-        out << "class ";
+    else
+        out << "struct ";
 
     if (classOrStructName.empty())
     {
@@ -720,17 +720,16 @@ void DlangBindGenerator::onTypedef(const clang::TypedefDecl *decl)
         if (rd)
         {
             if(!rd->getIdentifier())
-                deanonimizeTypedef(rd, typedefName);
-            else
             {
-                const auto& newId = rd->getASTContext().Idents.get(typedefName);
-                rd->setDeclName(DeclarationName(&newId));
+                deanonimizeTypedef(rd, typedefName);
+                onStructOrClassEnter(rd);
+                onStructOrClassLeave(rd);
+                // We're done here, but it also might be an option to append 
+                // underscore and add original typedef'ed name as alias
+                return; 
             }
-            onStructOrClassEnter(rd);
-            onStructOrClassLeave(rd);
-            // We're done here, but it also might be an option to append 
-            // underscore and add original typedef'ed name as alias
-            return; 
+            else if (rd->getNameAsString() == typedefName)
+                return;
         }
     }
 
