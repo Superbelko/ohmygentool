@@ -838,6 +838,22 @@ public:
         return true;
     }
 
+    bool VisitCXXDependentScopeMemberExpr(CXXDependentScopeMemberExpr *Node)
+    {
+        if (!Node->isImplicitAccess())
+        {
+            TraverseStmt(Node->getBase());
+            OS << ".";
+        }
+        //if (NestedNameSpecifier *Qualifier = Node->getQualifier())
+        //    Qualifier->print(OS, Policy);
+        //if (Node->hasTemplateKeyword())
+        //    OS << "template ";
+        OS << Node->getMemberNameInfo();
+        if (Node->hasExplicitTemplateArgs())
+            printDTemplateArgumentList(OS, Node->template_arguments(), Policy);
+        return Node->isImplicitAccess();
+    }
 
     bool VisitUnresolvedMemberExpr(UnresolvedMemberExpr *Node) 
     {
