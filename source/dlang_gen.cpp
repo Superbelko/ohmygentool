@@ -921,7 +921,10 @@ std::string DlangBindGenerator::toDStyle(QualType type)
         {
             if (i > 0 && i < numArgs)
                 os << ", ";
-            arg.print(*DlangBindGenerator::g_printPolicy, os);
+            if (arg.getKind() == TemplateArgument::ArgKind::Expression)
+                printPrettyD(arg.getAsExpr(), os, nullptr, *DlangBindGenerator::g_printPolicy);
+            else
+                arg.print(*DlangBindGenerator::g_printPolicy, os);
             i += 1;
         }
         os << ")";

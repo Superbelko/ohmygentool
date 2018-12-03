@@ -720,8 +720,13 @@ public:
             OCED->getInit()->IgnoreImpCasts()->printPretty(OS, nullptr, Policy);
             return true;
         }
-        if (NestedNameSpecifier *Qualifier = Node->getQualifier())
-            Qualifier->print(OS, Policy);
+        if (NestedNameSpecifier *Qualifier = Node->getQualifier()) 
+        {
+            if (auto t = Qualifier->getAsType())
+                OS << DlangBindGenerator::toDStyle(t->getCanonicalTypeInternal()) << ".";
+            else
+                Qualifier->print(OS, Policy);
+        }
         //if (Node->hasTemplateKeyword())
         //    OS << "template ";
         OS <<  DlangBindGenerator::sanitizedIdentifier(
@@ -1147,7 +1152,10 @@ static void printDTemplateArgumentList(raw_ostream &OS, ArrayRef<TA> Args,
         {
             if (!FirstArg)
                 OS << ", ";
-            Argument.print(Policy, ArgOS);
+            if (Argument.getKind() == TemplateArgument::ArgKind::Type)
+                ArgOS << DlangBindGenerator::toDStyle(Argument.getAsType());
+            else
+                Argument.print(Policy, ArgOS);
         }
 
         OS << ArgOS.str();
