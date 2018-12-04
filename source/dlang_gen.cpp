@@ -531,6 +531,7 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
         TemplateDecl* tpd = nullptr;
         const TemplateArgumentList* tparams = nullptr;
         const ClassTemplateSpecializationDecl* tsd = nullptr;
+        const ClassTemplatePartialSpecializationDecl* tps = dyn_cast<ClassTemplatePartialSpecializationDecl>(decl);
         if (isa<ClassTemplateSpecializationDecl>(decl))
             tsd = cast<ClassTemplateSpecializationDecl>(decl);
         if (tsd)
@@ -545,7 +546,13 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
 
         if ( decl->isThisDeclarationADefinition() ) // add only actual declarations
         {
-            if (tparams)
+            if (tps)
+            {
+                out << "(";
+                writeTemplateArgs(tps->getTemplateParameters());
+                out << ")";
+            }
+            else if (tparams)
             {
                 out << "(";
                 writeTemplateArgs(tparams);
@@ -1153,6 +1160,8 @@ void DlangBindGenerator::innerDeclIterate(const clang::RecordDecl *decl)
 {
     for (const auto it : decl->decls())
     {
+        if (it == decl)
+            continue;
         if (const auto e = llvm::dyn_cast<EnumDecl>(it))
         {
             onEnum(e);
@@ -1160,16 +1169,21 @@ void DlangBindGenerator::innerDeclIterate(const clang::RecordDecl *decl)
         if (const auto var = llvm::dyn_cast<VarDecl>(it))
         {
             //out << "@cppsize(" << finfo.Width / 8 << ")" << " ";
-            out << "static ";
+            out << "__gshared static ";
             out << getAccessStr(it->getAccess(), !decl->isClass()) << " ";
             out << toDStyle(var->getType()) << " ";
             out << sanitizedIdentifier(var->getName().str()) << ";";
             out << std::endl;
         }
+        if (const auto d = llvm::dyn_cast<ClassTemplateDecl>(it))
+        {
+            auto r = d->getTemplatedDecl();
+            onStructOrClassEnter(r);
+            onStructOrClassLeave(r);
+            continue;
+        }
         if (const auto d = llvm::dyn_cast<RecordDecl>(it))
         {
-            if (d == decl || !d->isCompleteDefinition())
-                continue;
             onStructOrClassEnter(d);
             onStructOrClassLeave(d);
         }
@@ -1742,6 +1756,32 @@ void DlangBindGenerator::writeTemplateArgs(const clang::TemplateArgumentList* ta
                 break;
             default: break;
         }
+        if (first)
+            first = false;
+        else
+            out << ", ";
+    }
+}
+
+void DlangBindGenerator::writeTemplateArgs(const clang::TemplateParameterList* tp)
+{
+    bool first = true;
+    for (const auto T : tp->asArray())
+    {
+        // TemplateTypeParmDecl | NonTypeTemplateParmDecl | ?
+        if (isa<NonTypeTemplateParmDecl>(T))
+        {
+            auto nt = cast<NonTypeTemplateParmDecl>(T);
+            out << toDStyle(nt->getType()) << " ";
+            if (auto defaultVal = nt->getDefaultArgument())
+            {
+                std::string s;
+                llvm::raw_string_ostream os(s);
+                printPrettyD(defaultVal, os, nullptr, *DlangBindGenerator::g_printPolicy);
+                out << " = " << os.str();
+            }
+        }
+        out << T->getName().str();
         if (first)
             first = false;
         else
