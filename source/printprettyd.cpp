@@ -35,8 +35,6 @@ using namespace clang::driver;
 using namespace clang::tooling;
 
 
-template<typename TA>
-static void printDTemplateArgumentList(raw_ostream &OS, ArrayRef<TA> Args, const PrintingPolicy &Policy, bool SkipBrackets = false);
 
 
 auto ret0 = returnStmt(has(integerLiteral(equals(0))));
@@ -1130,7 +1128,7 @@ static const TemplateArgument &getArgument(const TemplateArgumentLoc &A) {
 }
 
 template <typename TA>
-static void printDTemplateArgumentList(raw_ostream &OS, ArrayRef<TA> Args,
+void printDTemplateArgumentList(raw_ostream &OS, ArrayRef<TA> Args,
                                       const PrintingPolicy &Policy, bool SkipBrackets)
 {
     if (!SkipBrackets)

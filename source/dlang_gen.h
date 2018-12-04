@@ -63,6 +63,9 @@ void printPrettyD(const clang::CXXCtorInitializer *init, llvm::raw_ostream &OS, 
                      const clang::PrintingPolicy &Policy, unsigned Indentation = 0,
                      const clang::ASTContext *Context = nullptr);
 
+template<typename TA>
+void printDTemplateArgumentList(llvm::raw_ostream &OS, llvm::ArrayRef<TA> Args, const clang::PrintingPolicy &Policy, bool SkipBrackets = false);
+
 // Hacky marker class that is passed as printer helper, does nothing by itself
 class DPrinterHelper_PointerReturn : public clang::PrinterHelper
 {

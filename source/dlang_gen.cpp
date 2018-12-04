@@ -923,6 +923,8 @@ std::string DlangBindGenerator::toDStyle(QualType type)
                 os << ", ";
             if (arg.getKind() == TemplateArgument::ArgKind::Expression)
                 printPrettyD(arg.getAsExpr(), os, nullptr, *DlangBindGenerator::g_printPolicy);
+            else if (arg.getKind() == TemplateArgument::ArgKind::Type)
+                os << toDStyle(arg.getAsType());
             else
                 arg.print(*DlangBindGenerator::g_printPolicy, os);
             i += 1;
@@ -994,6 +996,45 @@ std::string DlangBindGenerator::toDStyle(QualType type)
                 res = os.str();
             }
         }
+    }
+    else if (const auto dn = typeptr->getAs<DependentNameType>())
+    {
+        std::string s;
+        llvm::raw_string_ostream os(s);
+        auto q = dn->getQualifier();
+        // print nested name
+        {
+            switch (q->getKind()) 
+            {
+            case NestedNameSpecifier::Identifier:
+                os << q->getAsIdentifier()->getName();
+                break;
+            case NestedNameSpecifier::Namespace:
+                if (!q->getAsNamespace()->isAnonymousNamespace())
+                    os << q->getAsNamespace()->getName();
+                break;
+            case NestedNameSpecifier::NamespaceAlias:
+                os << q->getAsNamespaceAlias()->getName();
+                break;
+            case NestedNameSpecifier::TypeSpecWithTemplate:
+            case NestedNameSpecifier::TypeSpec: {
+                const Type *T = q->getAsType();
+                if (const TemplateSpecializationType *SpecType = dyn_cast<TemplateSpecializationType>(T)) 
+                {
+                    SpecType->getTemplateName().print(os, *g_printPolicy, true);
+                    printDTemplateArgumentList(os, SpecType->template_arguments(), *g_printPolicy);
+                } else {
+                    os << toDStyle(QualType(T, 0));
+                }
+                break;
+                }
+            }
+
+            os << ".";
+        }
+        os << dn->getIdentifier()->getName().str();
+        os.flush();
+        res = s;
     }
     else
     {
