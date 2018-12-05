@@ -183,6 +183,36 @@ void deanonimizeTypedef(clang::RecordDecl* decl, const std::string_view optName 
 }
 
 
+void printQualifier(NestedNameSpecifier* qualifier, llvm::raw_ostream& os)
+{
+    switch (qualifier->getKind()) 
+    {
+    case NestedNameSpecifier::Identifier:
+        os << qualifier->getAsIdentifier()->getName();
+        break;
+    //case NestedNameSpecifier::Namespace:
+    //    if (!q->getAsNamespace()->isAnonymousNamespace())
+    //        os << q->getAsNamespace()->getName();
+    //    break;
+    case NestedNameSpecifier::NamespaceAlias:
+        os << qualifier->getAsNamespaceAlias()->getName();
+        break;
+    case NestedNameSpecifier::TypeSpecWithTemplate:
+    case NestedNameSpecifier::TypeSpec: {
+        const Type *T = qualifier->getAsType();
+        if (const TemplateSpecializationType *SpecType = dyn_cast<TemplateSpecializationType>(T)) 
+        {
+            SpecType->getTemplateName().print(os, *DlangBindGenerator::g_printPolicy, true);
+            printDTemplateArgumentList(os, SpecType->template_arguments(), *DlangBindGenerator::g_printPolicy);
+        } else {
+            os << DlangBindGenerator::toDStyle(QualType(T, 0));
+        }
+        break;
+        }
+    }
+}
+
+
 // Replaces C++ token like arrow operator or scope double-colon
 void textReplaceArrowColon(std::string& in)
 {
@@ -910,6 +940,21 @@ std::string DlangBindGenerator::toDStyle(QualType type)
         s.append(")");
         res = s;
     }
+    else if (typeptr->getTypeClass() == Type::TypeClass::Elaborated)
+    {
+        auto et = typeptr->getAs<ElaboratedType>();
+        std::string s;
+        llvm::raw_string_ostream os(s);
+        // print nested name
+        if (auto q = et->getQualifier())
+        {
+            printQualifier(q, os);
+            if (q->getKind() != NestedNameSpecifier::SpecifierKind::Namespace)
+                os << ".";
+        }
+        os << toDStyle(et->getNamedType());
+        res = os.str();
+    }
     else if (type->isBuiltinType())
     {
         res = _toDBuiltInType(type);
@@ -1008,40 +1053,15 @@ std::string DlangBindGenerator::toDStyle(QualType type)
     {
         std::string s;
         llvm::raw_string_ostream os(s);
-        auto q = dn->getQualifier();
         // print nested name
+        if (auto q = dn->getQualifier())
         {
-            switch (q->getKind()) 
-            {
-            case NestedNameSpecifier::Identifier:
-                os << q->getAsIdentifier()->getName();
-                break;
-            case NestedNameSpecifier::Namespace:
-                if (!q->getAsNamespace()->isAnonymousNamespace())
-                    os << q->getAsNamespace()->getName();
-                break;
-            case NestedNameSpecifier::NamespaceAlias:
-                os << q->getAsNamespaceAlias()->getName();
-                break;
-            case NestedNameSpecifier::TypeSpecWithTemplate:
-            case NestedNameSpecifier::TypeSpec: {
-                const Type *T = q->getAsType();
-                if (const TemplateSpecializationType *SpecType = dyn_cast<TemplateSpecializationType>(T)) 
-                {
-                    SpecType->getTemplateName().print(os, *g_printPolicy, true);
-                    printDTemplateArgumentList(os, SpecType->template_arguments(), *g_printPolicy);
-                } else {
-                    os << toDStyle(QualType(T, 0));
-                }
-                break;
-                }
-            }
-
-            os << ".";
+            printQualifier(q, os);
+            if (q->getKind() != NestedNameSpecifier::SpecifierKind::Namespace)
+                os << ".";
         }
         os << dn->getIdentifier()->getName().str();
-        os.flush();
-        res = s;
+        res = os.str();
     }
     else
     {

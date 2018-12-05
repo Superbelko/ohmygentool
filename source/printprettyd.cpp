@@ -1146,6 +1146,12 @@ void printDTemplateArgumentList(raw_ostream &OS, ArrayRef<TA> Args,
                 OS << ", ";
             printDTemplateArgumentList(ArgOS, Argument.getPackAsArray(), Policy);
         }
+        else if (Argument.getKind() == TemplateArgument::Expression)
+        {
+            if (!FirstArg)
+                OS << ", ";
+            printPrettyD(Argument.getAsExpr(), OS, nullptr, Policy);
+        }
         else
         {
             if (!FirstArg)
