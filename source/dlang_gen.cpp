@@ -655,7 +655,17 @@ void DlangBindGenerator::onEnum(const clang::EnumDecl *decl)
         return;
 
     const auto size = std::distance(decl->enumerator_begin(), decl->enumerator_end());
-    const auto enumTypeString = toDStyle(decl->getIntegerType());
+    auto enumTypeString = toDStyle(decl->getIntegerType());
+
+    if (auto td = decl->getTypedefNameForAnonDecl())
+    {
+        addType(cast<TypedefDecl>(td), storedTypes);
+        if (td->getUnderlyingType().getTypePtr() != decl->getTypeForDecl())
+        {
+            enumTypeString = toDStyle(td->getUnderlyingType());
+            out << "alias " << enumTypeString << " = " << toDStyle(decl->getIntegerType()) << ";" << std::endl;
+        }
+    }
 
     bool hasName = !decl->getName().empty();
     if (hasName)
@@ -775,7 +785,10 @@ void DlangBindGenerator::onTypedef(const clang::TypedefDecl *decl)
     {
         out << "extern(" << externAsString(extC) << ") ";
     }
-    out << toDStyle(decl->getUnderlyingType()) << ";";
+    if (decl->getUnderlyingType()->isEnumeralType())
+        out << "int;";
+    else
+        out << toDStyle(decl->getUnderlyingType()) << ";";
     out << std::endl;
 
     out << std::endl;
