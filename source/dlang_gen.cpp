@@ -620,6 +620,7 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
             }
         }
         // adds list of base classes
+        if (isVirtual)
         nonvirt = printBases(cxxdecl);
     }
     out << std::endl;
@@ -637,6 +638,7 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
         //    out << "mixin RvalueRef;" << std::endl;
         innerDeclIterate(decl);
         int baseid = 0;
+        if (isVirtual)
         for (auto fakeBase : nonvirt)
         {
             if (!isa<RecordDecl>(fakeBase))
@@ -646,6 +648,33 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
             out << "_b" << baseid << ";" << std::endl;
             out << "alias " << "_b" << baseid << " this;" << std::endl;
             baseid+=1;
+        }
+        else if (cxxdecl) // if (isVirtual)
+        {
+            // TODO: refactor. this branch duplicates printBases() and previous condition
+            unsigned int numBases = cxxdecl->getNumBases();
+            for (const auto b : cxxdecl->bases())
+            {
+                numBases--;
+                RecordDecl* rd = b.getType()->getAsRecordDecl(); 
+                if (rd && !hasVirtualMethods(cast<RecordDecl>(rd))){
+                    out << rd->getNameAsString() << " ";
+                    out << "_b" << baseid << ";" << std::endl;
+                    if (baseid == 0) 
+                        out << "alias " << "_b" << baseid << " this;" << std::endl;
+                    baseid+=1;
+                }
+
+                // templated base class
+                if (b.getType()->getTypeClass() == Type::TypeClass::TemplateSpecialization)
+                {
+                    out << toDStyle(b.getType()) << " ";
+                    out << "_b" << baseid << ";" << std::endl;
+                    if (baseid == 0) 
+                        out << "alias " << "_b" << baseid << " this;" << std::endl;
+                    baseid+=1;
+                }
+            }
         }
         fieldIterate(decl);
         if (cxxdecl)
