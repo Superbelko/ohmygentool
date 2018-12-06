@@ -63,6 +63,9 @@ void printPrettyD(const clang::CXXCtorInitializer *init, llvm::raw_ostream &OS, 
                      const clang::PrintingPolicy &Policy, unsigned Indentation = 0,
                      const clang::ASTContext *Context = nullptr);
 
+// Adjusts ref/pointer types to be used as variable type and wraps/unwraps if necessary
+clang::QualType adjustForVariable(clang::QualType ty, clang::ASTContext* ctx = nullptr);
+
 template<typename TA>
 void printDTemplateArgumentList(llvm::raw_ostream &OS, llvm::ArrayRef<TA> Args, const clang::PrintingPolicy &Policy, bool SkipBrackets = false);
 

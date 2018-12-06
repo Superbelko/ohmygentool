@@ -298,6 +298,30 @@ bool hasVirtualMethods(const RecordDecl* rd)
 }
 
 
+clang::QualType adjustForVariable(clang::QualType ty, clang::ASTContext* ctx)
+{
+    bool isVirtual = hasVirtualMethods(ty->getAsRecordDecl());
+    if (isVirtual)
+    {
+        // Class in D is reference type, so remove first pointer
+        if (ty->isPointerType() || ty->isReferenceType())
+            return ty->getPointeeType();
+    }
+    else
+    {
+        if (ty->isReferenceType() && ctx)
+        {
+            // Convert non-class refs to pointers
+            // NOTE: this won't affect sizeof attribute,
+            //  in some cases (GNU GCC?) it might differ from actual memory layout
+            auto newtype = ctx->getPointerType(ty->getPointeeType());
+            return newtype;
+        }
+    }
+    return ty;
+}
+
+
 bool DlangBindGenerator::isRelevantPath(const std::string_view path)
 {
     if (path.size() == 0 || path.compare("<invalid loc>") == 0) 
@@ -899,6 +923,8 @@ void DlangBindGenerator::_typeRoll(QualType type, std::vector<std::string> &part
 std::string DlangBindGenerator::toDStyle(QualType type)
 {
     std::string res;
+    type.removeLocalRestrict();
+    type.removeLocalVolatile();
     const auto typeptr = type.getTypePtr();
 
     if (type->isPointerType() || type->isReferenceType())
@@ -1325,7 +1351,7 @@ void DlangBindGenerator::fieldIterate(const clang::RecordDecl *decl)
             }
         }
 
-        auto fieldTypeStr = toDStyle(it->getType());
+        auto fieldTypeStr = toDStyle(adjustForVariable(it->getType(), &decl->getASTContext()));
         if (!it->getIdentifier())
         {
             if (fieldTypeStr.compare("_anon") != -1)
