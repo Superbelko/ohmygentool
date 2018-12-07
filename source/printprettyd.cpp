@@ -472,13 +472,13 @@ public:
         auto m = I->getMember();
         auto builtin = m->getType()->isBuiltinType() || m->getType()->isAnyPointerType();
         OS << m->getName() << " = ";
-        if (!builtin)
-            OS << DlangBindGenerator::toDStyle(m->getType()) << "(";
+        //if (!builtin)
+        //    OS << DlangBindGenerator::toDStyle(m->getType()) << "(";
 
         TraverseStmt(I->getInit());
 
-        if (!builtin)
-            OS << ")";
+        //if (!builtin)
+        //    OS << ")";
         OS << ";\n";
 
         return false;
@@ -488,7 +488,7 @@ public:
     {
         auto br = E->getParenOrBraceRange();
         bool canBeImplicit = E->getConstructor()->isImplicitlyInstantiable();
-        bool prependType = false;
+        bool prependType = isCtorInitializer;
 
         if(E->isListInitialization())
             prependType = true;
@@ -498,9 +498,12 @@ public:
         if (finder.node)
             prependType = true;
         
+        // hacky way
+        if (E->getNumArgs() == 1 && isa<Expr>(E->getArg(0)))
+            prependType = false;
 
         // if doesn't have braces might mean it is implicit ctor match
-        if (prependType && !isCtorInitializer)
+        if (prependType)// && !isCtorInitializer)
         {
             OS << DlangBindGenerator::toDStyle(E->getType());
         }
