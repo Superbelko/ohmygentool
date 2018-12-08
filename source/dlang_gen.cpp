@@ -294,7 +294,63 @@ bool hasVirtualMethods(const RecordDecl* rd)
 
     const auto rec = cast<CXXRecordDecl>(rd);
     auto found = std::find_if(rec->method_begin(), rec->method_end(), isVirtual) != rec->method_end();
+    if (!rec->getDefinition())
+        return found;
     return found || std::any_of(rec->bases_begin(), rec->bases_end(), [](auto a){ return hasVirtualMethods(a.getType()->getAsRecordDecl()); });
+}
+
+
+// Check for possible overrides. 
+// Including cases where override attribute is not present or not even virtual
+bool overridesBaseOf(const FunctionDecl* fn, const CXXRecordDecl* rec)
+{
+    static auto isStatic = [] (const FunctionDecl* a) {
+        return isa<CXXMethodDecl>(a) && cast<CXXMethodDecl>(a)->isStatic();
+    };
+    static auto isSame = [] (const FunctionDecl* a, const FunctionDecl* b) -> bool {
+        if (a->getAccess() == AccessSpecifier::AS_private || b->getAccess() == AccessSpecifier::AS_private)
+            return false;
+        if (isStatic(a) || isStatic(b))
+            return false;
+        if (a->getNumParams() != b->getNumParams())
+            return false;
+        if (a->getDeclKind() != b->getDeclKind())
+            return false;
+        if (a->getIdentifier() && b->getIdentifier())
+            if (a->getName() != b->getName())
+                return false;
+        if (a->getNumParams() == 0 && b->getNumParams() == 0)
+            return true;
+        return std::equal(a->param_begin(), a->param_end(), b->param_begin(), b->param_end(), 
+            [](const ParmVarDecl* p1, const ParmVarDecl* p2) {
+                return p1->getType() == p2->getType();
+        });
+    };
+
+    for (auto b : rec->bases())
+    {
+        const CXXRecordDecl* bc = nullptr;
+
+        if (b.getType()->getTypeClass() == Type::TemplateTypeParm)
+            continue;
+
+        if (b.getType()->getTypeClass() == Type::TemplateSpecialization)
+        {
+            auto tp = b.getType().getTypePtr();
+            auto tst = tp->getAs<TemplateSpecializationType>();
+            bc = cast<CXXRecordDecl>(tst->getTemplateName().getAsTemplateDecl()->getTemplatedDecl());
+        }
+        else
+            bc = b.getType()->getAsCXXRecordDecl();
+        for(const auto m : bc->methods())
+        {
+            if (isSame(fn, m))
+                return true;
+        }
+        if (overridesBaseOf(fn, bc))
+            return true;
+    }
+    return false;
 }
 
 
@@ -1557,6 +1613,8 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
             if (pos == std::string::npos)
                 pos = funcName.length();
 
+            // This will be handled as an option to write mangling to external file
+            #if 0
             if (mangleOut.is_open())
             {
                 mangleOut << "pragma(mangle, \"" << mangledName << "\")" << std::endl;
@@ -1576,6 +1634,7 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
                     << std::endl;
             }
             else 
+            #endif
             {
                 out << "pragma(mangle, \"" << mangledName << "\")" << std::endl;
             }
@@ -1584,13 +1643,9 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
         if (m->isDefaulted())
             out << "// (default) ";
 
-        
-
-        bool possibleOverride = !(isCtor || isDtor) && m->size_overridden_methods() && m->getBody();
-        bool commentOut = (!isVirtualDecl && isDefaultCtor) || idAssign;
-
-        if (!isVirtualDecl && possibleOverride)
-            commentOut = true;
+        bool possibleOverride = !(isCtor || isDtor) && overridesBaseOf(m, decl);
+        bool cantOverride = possibleOverride && !(m->hasAttr<OverrideAttr>() || m->isVirtual());
+        bool commentOut = (!isVirtualDecl && isDefaultCtor) || idAssign || cantOverride;
         // default ctor for struct not allowed
         if (commentOut)
         {
@@ -1609,13 +1664,14 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
 
         out << getAccessStr(m->getAccess(), !isClass) << " ";
 
-        if (m->hasAttr<OverrideAttr>() || possibleOverride)
+        if (!cantOverride)
+        if (isVirtualDecl && possibleOverride)
             out << "override ";
 
         if (isStatic)
             out << "static ";
 
-        if (isClass && !m->isVirtual())
+        if (isVirtualDecl && !m->isVirtual())
             out << "final ";
 
         if (moveCtor && m->getAccess() == AccessSpecifier::AS_private)
