@@ -326,22 +326,26 @@ bool overridesBaseOf(const FunctionDecl* fn, const CXXRecordDecl* rec)
                 return p1->getType() == p2->getType();
         });
     };
-
+    if (rec && rec->getDefinition())
     for (auto b : rec->bases())
     {
         const CXXRecordDecl* bc = nullptr;
-
-        if (b.getType()->getTypeClass() == Type::TemplateTypeParm)
-            continue;
-
         if (b.getType()->getTypeClass() == Type::TemplateSpecialization)
         {
             auto tp = b.getType().getTypePtr();
             auto tst = tp->getAs<TemplateSpecializationType>();
-            bc = cast<CXXRecordDecl>(tst->getTemplateName().getAsTemplateDecl()->getTemplatedDecl());
+            if (auto td = tst->getTemplateName().getAsTemplateDecl())
+            {
+                if (auto tdec = td->getTemplatedDecl(); tdec && isa<CXXRecordDecl>(tdec))
+                    bc = cast<CXXRecordDecl>(tdec);
+            }
         }
         else
             bc = b.getType()->getAsCXXRecordDecl();
+
+        if (!bc)
+            continue;
+
         for(const auto m : bc->methods())
         {
             if (isSame(fn, m))
