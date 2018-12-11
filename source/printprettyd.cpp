@@ -471,7 +471,7 @@ public:
 
         auto m = I->getMember();
         auto builtin = m->getType()->isBuiltinType() || m->getType()->isAnyPointerType();
-        OS << m->getName() << " = ";
+        OS << DlangBindGenerator::sanitizedIdentifier(m->getNameAsString()) << " = ";
         //if (!builtin)
         //    OS << DlangBindGenerator::toDStyle(m->getType()) << "(";
 
@@ -554,6 +554,7 @@ public:
 
     bool VisitMemberExpr(MemberExpr *Node)
     {
+        ImplicitCastExpr* ic = nullptr;
         bool thisBase = (Node->getBase() && Node->getBase()->getStmtClass() == Stmt::CXXThisExprClass);
         if (!Policy.SuppressImplicitBase || !isImplicitThis(Node->getBase()))
         {
@@ -565,15 +566,44 @@ public:
                              : nullptr;
 
             if (!ParentDecl || !ParentDecl->isAnonymousStructOrUnion())
-                OS << ".";
+            {
+                // Ignore non-polymorphic bases for D (avoids empty leading dot in some cases)
+                bool implcast = isa<ImplicitCastExpr>(Node->getBase());
+                bool ignoreBase = false;
+                
+                if (implcast)
+                    ic = cast<ImplicitCastExpr>(Node->getBase());
+                // Check for implicit base cast
+                if (ic)
+                {
+                    if (ic->isImplicitCXXThis())
+                        ignoreBase = true;
+                    else if (auto cls = ic->getBestDynamicClassType(); ic->isImplicitCXXThis() && cls)
+                        if (!hasVirtualMethods(cls))
+                            ignoreBase = true;
+                }
+
+                if (!ignoreBase)
+                    OS << ".";
+            }
         }
 
         if (auto *FD = dyn_cast<FieldDecl>(Node->getMemberDecl()))
             if (FD->isAnonymousStructOrUnion())
                 return false;
 
-        if (NestedNameSpecifier *Qualifier = Node->getQualifier())
-            Qualifier->print(OS, Policy);
+        if (NestedNameSpecifier *Qualifier = Node->getQualifier()) {
+            if (ic && ic->getBestDynamicClassType() && Qualifier->getKind() == NestedNameSpecifier::SpecifierKind::TypeSpec)
+            {
+                if (auto rec = Qualifier->getAsRecordDecl())
+                    if (ic->getBestDynamicClassType()->isDerivedFrom(rec))
+                        {} // intentionally left blank
+                    else 
+                        Qualifier->print(OS, Policy);
+            }
+            else
+                Qualifier->print(OS, Policy);
+        }
         //if (Node->hasTemplateKeyword())
         //    OS << "template ";
         OS <<  DlangBindGenerator::sanitizedIdentifier(
@@ -672,6 +702,10 @@ public:
             printDTemplateArgumentList(OS, f->getTemplateSpecializationArgs()->asArray(), Policy);
         }
 
+        // dont add parens after destroy()
+        if (isa<CXXPseudoDestructorExpr>(Call->getCallee()))
+            return;
+
         OS << "(";
         PrintCallArgs(Call);
         OS << ")";
@@ -759,10 +793,10 @@ public:
 
         switch(Node->getKind()) {
         case UETT_SizeOf:
-            OS << ".sizeof";
+            OS << ".sizeof"; return false;
             break;
         case UETT_AlignOf:
-            OS << ".alignof";
+            OS << ".alignof"; return false;
             break;
         }
         
@@ -832,10 +866,9 @@ public:
 
     bool VisitCXXPseudoDestructorExpr(CXXPseudoDestructorExpr *E)
     {
-        // NOTE: Should it be forwarded to __xdtor ?
         OS << "destroy(";
         TraverseStmt(E->getBase());
-        OS << ");\n";
+        OS << ")";
         return false;
     }
 
