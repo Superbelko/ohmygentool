@@ -195,10 +195,20 @@ void RecordDeclMatcher<T>::run(const MatchFinder::MatchResult &Result)
 		rec = glob;
 	}
 
+	std::string s;
+	llvm::raw_string_ostream os(s);
+
 	auto sfile = srcMgr.getFileID(rec->getLocation());
 	auto* f = srcMgr.getFileEntryForID(sfile);
 	if (f)
 		path = f->getName();
+	else { 
+		if (sfile.isValid())
+			srcMgr.getExpansionLoc(rec->getLocation()).print(os, srcMgr);
+		else
+			srcMgr.getExpansionLoc(rec->getBeginLoc()).print(os, srcMgr);
+		path = os.str();
+	}
 	
 	if (!impl.isRelevantPath(path))
 		return;
