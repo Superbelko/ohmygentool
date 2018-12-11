@@ -861,6 +861,19 @@ public:
         return Node->isImplicitAccess();
     }
 
+    bool VisitCXXUnresolvedConstructExpr(CXXUnresolvedConstructExpr *Node) {
+        OS << DlangBindGenerator::toDStyle(Node->getTypeAsWritten());
+        OS << "(";
+        for(auto Arg = Node->arg_begin(); Arg != Node->arg_end(); Arg++) 
+        {
+            if (Arg != Node->arg_begin())
+                OS << ", ";
+            TraverseStmt(*Arg);
+        }
+        OS << ")";
+        return false;
+    }
+
     bool VisitUnresolvedMemberExpr(UnresolvedMemberExpr *Node) 
     {
         if (!Node->isImplicitAccess()) {

@@ -1022,6 +1022,14 @@ std::string DlangBindGenerator::toDStyle(QualType type)
             return toDStyle(type->getPointeeType());
         res = _wrapParens(type);
     }
+    else if (const auto pt = llvm::dyn_cast<ParenType>(typeptr))
+    {
+        res = toDStyle(pt->getInnerType());
+    }
+    else if (const auto td = llvm::dyn_cast<TypedefType>(typeptr))
+    {
+        res = td->getDecl()->getNameAsString();
+    }
     else if (type->isArrayType())
     {
 
@@ -1867,6 +1875,7 @@ void DlangBindGenerator::writeTemplateArgs(const clang::TemplateDecl* td)
         {
             auto nt = cast<NonTypeTemplateParmDecl>(tp);
             out << toDStyle(nt->getType()) << " ";
+            out << tp->getNameAsString();
             if (auto defaultVal = nt->getDefaultArgument())
             {
                 std::string s;
@@ -1875,7 +1884,8 @@ void DlangBindGenerator::writeTemplateArgs(const clang::TemplateDecl* td)
                 out << " = " << os.str();
             }
         }
-        out << tp->getName().str();
+        else
+            out << tp->getName().str();
         if (tp != *(tplist->end() - 1))
             out << ", ";
     }
