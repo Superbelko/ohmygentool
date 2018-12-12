@@ -161,7 +161,7 @@ public:
             OS << "__gshared static ";
 
         //printDeclType(T, D->getName());
-        auto typeString = DlangBindGenerator::toDStyle(T);
+        auto typeString = DlangBindGenerator::toDStyle(adjustForVariable(T, const_cast<ASTContext*>(Context)));
         OS << typeString << " " << DlangBindGenerator::sanitizedIdentifier(D->getName());
         Expr *Init = D->getInit();
         if (!Policy.SuppressInitializers && Init)
@@ -688,19 +688,7 @@ public:
 
     void PrintCallExpr(CallExpr *Call)
     {
-        if ( Call->getDirectCallee() && Call->getDirectCallee()->getIdentifier() )
-            OS << Call->getDirectCallee()->getName();
-        else 
-            TraverseStmt(Call->getCallee());
-
-        const FunctionDecl* f = Call->getDirectCallee();
-        if(f) 
-            f = f->getAsFunction();
-        if (f && f->isTemplateInstantiation() 
-              && f->getTemplateSpecializationArgs())
-        {
-            printDTemplateArgumentList(OS, f->getTemplateSpecializationArgs()->asArray(), Policy);
-        }
+        TraverseStmt(Call->getCallee());
 
         // dont add parens after destroy()
         if (isa<CXXPseudoDestructorExpr>(Call->getCallee()))
@@ -727,22 +715,9 @@ public:
     {
         // If we have a conversion operator call only print the argument.
         CXXMethodDecl *MD = Node->getMethodDecl();
-        if (MD && isa<CXXConversionDecl>(MD)) { // what?
+        if (MD && isa<CXXConversionDecl>(MD)) {
             TraverseStmt(Node->getImplicitObjectArgument());
             return false;
-        }
-
-        if (auto impl = Node->getImplicitObjectArgument())
-        {
-            //std::string s;
-            //llvm::raw_string_ostream os(s);
-            //impl->printPretty(os, nullptr, Policy);
-            //OS << s;
-            if (!impl->isImplicitCXXThis())
-            {
-                TraverseStmt(impl);
-                OS << ".";
-            }
         }
         PrintCallExpr(Node);
         return false;
@@ -757,10 +732,15 @@ public:
         }
         if (NestedNameSpecifier *Qualifier = Node->getQualifier()) 
         {
-            if (auto t = Qualifier->getAsType())
-                OS << DlangBindGenerator::toDStyle(t->getCanonicalTypeInternal()) << ".";
-            else
-                Qualifier->print(OS, Policy);
+            switch(Qualifier->getKind())
+            {
+                case NestedNameSpecifier::SpecifierKind::TypeSpec:
+                case NestedNameSpecifier::SpecifierKind::TypeSpecWithTemplate:
+                    OS << DlangBindGenerator::toDStyle(QualType(Qualifier->getAsType(), 0)) << ".";
+                    break;
+            }
+            //else
+            //    Qualifier->print(OS, Policy);
         }
         //if (Node->hasTemplateKeyword())
         //    OS << "template ";
@@ -933,6 +913,47 @@ public:
         if (Node->hasExplicitTemplateArgs())
             printDTemplateArgumentList(OS, Node->template_arguments(), Policy);
         return true;
+    }
+
+    bool VisitCXXNamedCastExpr(CXXNamedCastExpr *Node) 
+    {
+        // Try get pointer instead of reference because there is no ref variables
+        bool isRef = Node->getTypeAsWritten()->isReferenceType();
+        OS << "cast(";
+        if (isRef)
+            OS << DlangBindGenerator::toDStyle(adjustForVariable(Node->getTypeAsWritten(), const_cast<ASTContext*>(Context)));
+        else
+            OS << DlangBindGenerator::toDStyle(Node->getTypeAsWritten());
+        OS << ")(";
+        if (isRef)
+            OS << "&";
+        TraverseStmt(Node->getSubExpr());
+        OS << ")";
+        return false;
+    }
+
+    bool VisitCXXStaticCastExpr(CXXStaticCastExpr *Node) 
+    {
+        VisitCXXNamedCastExpr(Node);
+        return false;
+    }
+
+    bool VisitCXXDynamicCastExpr(CXXDynamicCastExpr *Node) 
+    {
+        VisitCXXNamedCastExpr(Node);
+        return false;
+    }
+
+    bool VisitCXXReinterpretCastExpr(CXXReinterpretCastExpr *Node) 
+    {
+        VisitCXXNamedCastExpr(Node);
+        return false;
+    }
+
+    bool VisitCXXConstCastExpr(CXXConstCastExpr *Node) 
+    {
+        VisitCXXNamedCastExpr(Node);
+        return false;
     }
 
     bool VisitCXXFunctionalCastExpr(CXXFunctionalCastExpr *Node) 
