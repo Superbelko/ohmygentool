@@ -5,6 +5,7 @@
 #include <iomanip>
 #include <memory>
 
+#include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "clang/AST/AST.h"
 #include "clang/AST/ASTConsumer.h"
@@ -1657,7 +1658,7 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
 
         bool possibleOverride = !(isCtor || isDtor) && overridesBaseOf(m, decl);
         bool cantOverride = possibleOverride && !(m->hasAttr<OverrideAttr>() || m->isVirtual());
-        bool commentOut = (!isVirtualDecl && isDefaultCtor) || idAssign || cantOverride;
+        bool commentOut = (!isVirtualDecl && isDefaultCtor) || idAssign || (isVirtualDecl && cantOverride);
         // default ctor for struct not allowed
         if (commentOut)
         {
@@ -1729,7 +1730,9 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
                     if (commentOut) 
                         out << "//";
                     textReplaceArrowColon(line);
-                    out << line << std::endl;
+                    out << line;
+                    if (!ss.eof()) 
+                        out << std::endl;
                 }
             };
 
@@ -1755,27 +1758,47 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
 
                 for(const auto init : ctdecl->inits())
                 {
+                    if (!init->isWritten())
+                        continue;
                     // This will be handled at some point later by memberIterate() 
                     if (init->isInClassMemberInitializer())
                         continue;
                     if (auto member = init->getMember())
                     {
-                        //if (commentOut)
-                        //    out << "//";
-                        //out << sanitizedIdentifier(member->getNameAsString()) << " = ";
                         writeMultilineExpr(init);
                     }
                     if (init->isBaseInitializer() && hasInitializerList)
                     {
-                        // TODO: modify writeMultilineExpr() to not insert newline at the end and use it instead of raw printing
+                        bool tempComm = commentOut;
+                        auto scope = llvm::make_scope_exit ( [&]{commentOut = tempComm;} );
+                        // check if aliased base class have constructor available
+                        if (auto basector = dyn_cast<CXXConstructExpr>(init->getInit()))
+                        {
+                            if (!isVirtualDecl)
+                            {
+                                auto baserec = basector->getType()->getAsCXXRecordDecl();
+                                if ( decl->getNumBases() 
+                                    && decl->bases_begin()->getType()->getAsCXXRecordDecl() == baserec)
+                                {
+                                    if (basector->getNumArgs() > 0)
+                                    {
+                                        if (commentOut)
+                                            out << "//";
+                                        out << "_b0.__ctor(";
+                                        writeMultilineExpr(init->getInit());
+                                        out << ");" << std::endl;
+                                        continue;
+                                    }
+                                    else
+                                         commentOut = true;
+                                }
+                            }
+                        }
+
                         if (commentOut)
                             out << "//";
                         out << "super(";
-                        std::string s;
-                        llvm::raw_string_ostream os(s);
-                        printPrettyD(init->getInit(), os, nullptr, *DlangBindGenerator::g_printPolicy, 0, ast);
-                        os.flush();
-                        out << s;
+                        writeMultilineExpr(init->getInit());
                         out << ");" << std::endl;
                     }
                 }
@@ -1788,6 +1811,7 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
             {
                 // write body after initializer list
                 writeMultilineExpr(m->getBody(), m->getReturnType()->isPointerType());
+                out << std::endl;
             }
 
             // close extra braces
