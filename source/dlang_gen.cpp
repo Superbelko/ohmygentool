@@ -417,6 +417,8 @@ void DlangBindGenerator::setOptions(const InputOptions *inOpt, const OutputOptio
             nogc = true;
         if (std::find(outOpt->extras.begin(), outOpt->extras.end(), "no-param-refs") != outOpt->extras.end())
             stripRefParam = false;
+        if (std::find(outOpt->extras.begin(), outOpt->extras.end(), "skip-bodies") != outOpt->extras.end())
+            skipBodies = true;
 
         // TODO: select valid policy here
         //nsPolicy.reset(new NamespacePolicy_StringList());
@@ -1715,7 +1717,7 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
             out << "/* MANGLING OVERRIDE NOT YET FINISHED, ADJUST MANUALLY! */ ";
         
         // write function body
-        if (m->isInlined() && m->hasInlineBody() && !isDtor)
+        if (!skipBodies && m->isInlined() && m->hasInlineBody() && !isDtor)
         {
             auto writeMultilineExpr = [this, commentOut, ast](auto expr, bool ptrRet = false) {
                 std::string s;

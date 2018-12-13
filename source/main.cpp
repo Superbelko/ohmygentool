@@ -326,9 +326,17 @@ std::tuple<InputOptions, OutputOptions> readJSON(const std::string_view data)
 	auto opt_refs = output.FindMember("no-param-refs");
 	if (opt_refs != output.MemberEnd())
 	{
-		auto val = attrnogc->value.GetBool();
+		auto val = opt_refs->value.GetBool();
 		if (val)
 			outopts.extras.push_back("no-param-refs");
+	}
+
+	auto skip_body = output.FindMember("skip-bodies");
+	if (skip_body != output.MemberEnd())
+	{
+		auto val = skip_body->value.GetBool();
+		if (val)
+			outopts.extras.push_back("skip-bodies");
 	}
 	
 	return std::make_tuple(inopts, outopts);

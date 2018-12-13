@@ -116,7 +116,8 @@ protected:
     bool cppIsDefault = true;
     bool nogc = false;
     // Strip ref parameters from functions with bodies? (until DIP for r-value refs accepted they are a PITA to use in D)
-    bool stripRefParam = true; 
+    bool stripRefParam = true;
+    bool skipBodies = false;
     bool oldNamespaces = false;
 
 	gentool::InputOptions const* iops;
