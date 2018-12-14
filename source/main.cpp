@@ -338,6 +338,14 @@ std::tuple<InputOptions, OutputOptions> readJSON(const std::string_view data)
 		if (val)
 			outopts.extras.push_back("skip-bodies");
 	}
+
+	auto mangle_all = output.FindMember("mangle-all");
+	if (mangle_all != output.MemberEnd())
+	{
+		auto val = mangle_all->value.GetBool();
+		if (val)
+			outopts.extras.push_back("mangle-all");
+	}
 	
 	return std::make_tuple(inopts, outopts);
 }

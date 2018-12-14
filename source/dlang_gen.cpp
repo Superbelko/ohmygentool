@@ -416,9 +416,11 @@ void DlangBindGenerator::setOptions(const InputOptions *inOpt, const OutputOptio
         if (std::find(outOpt->extras.begin(), outOpt->extras.end(), "attr-nogc") != outOpt->extras.end())
             nogc = true;
         if (std::find(outOpt->extras.begin(), outOpt->extras.end(), "no-param-refs") != outOpt->extras.end())
-            stripRefParam = false;
+            stripRefParam = true;
         if (std::find(outOpt->extras.begin(), outOpt->extras.end(), "skip-bodies") != outOpt->extras.end())
             skipBodies = true;
+        if (std::find(outOpt->extras.begin(), outOpt->extras.end(), "mangle-all") != outOpt->extras.end())
+            mangleAll = true;
 
         // TODO: select valid policy here
         //nsPolicy.reset(new NamespacePolicy_StringList());
@@ -828,6 +830,25 @@ void DlangBindGenerator::onFunction(const clang::FunctionDecl *decl)
         out << "extern(" << externStr << ")" << std::endl;
     else
         nsPolicy->beginEntry(decl, externStr);
+
+    // pragma mangle
+    if (!fn->isTemplated())
+    {
+        if (mangleAll && externStr == "C++")
+        {
+            clang::ASTContext& ast = fn->getASTContext();
+            std::unique_ptr<MangleContext> mangleCtx;
+            if (ast.getTargetInfo().getTargetOpts().Triple.find("windows") != std::string::npos)
+                mangleCtx.reset(clang::MicrosoftMangleContext::create(ast, ast.getDiagnostics()));
+            else
+                mangleCtx.reset(clang::ItaniumMangleContext::create(ast, ast.getDiagnostics()));
+            std::string mangledName;
+            llvm::raw_string_ostream ostream(mangledName);
+            mangleCtx->mangleName(fn, ostream);
+            ostream.flush();
+            out << "pragma(mangle, \"" << mangledName << "\")" << std::endl;
+        }
+    }
 
     // ret type
     {
@@ -1622,8 +1643,18 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
             customMangle = customMangle_;
         }
 
-        if (customMangle && !(decl->isTemplated() || m->isTemplated()))
+
+        bool possibleOverride = !(isCtor || isDtor) && overridesBaseOf(m, decl);
+        bool cantOverride = possibleOverride && !(m->hasAttr<OverrideAttr>() || m->isVirtual());
+        bool commentOut = (!isVirtualDecl && isDefaultCtor) || idAssign || (isVirtualDecl && cantOverride);
+        // default ctor for struct not allowed
+        
+        
+        if ((mangleAll || customMangle) && !m->isTemplated())
         {
+            if (commentOut)
+                out << "//";
+                
             auto pos = funcName.find('(');
             if (pos == std::string::npos)
                 pos = funcName.length();
@@ -1658,10 +1689,6 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
         if (m->isDefaulted())
             out << "// (default) ";
 
-        bool possibleOverride = !(isCtor || isDtor) && overridesBaseOf(m, decl);
-        bool cantOverride = possibleOverride && !(m->hasAttr<OverrideAttr>() || m->isVirtual());
-        bool commentOut = (!isVirtualDecl && isDefaultCtor) || idAssign || (isVirtualDecl && cantOverride);
-        // default ctor for struct not allowed
         if (commentOut)
         {
             out << "// ";
@@ -1685,6 +1712,9 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
 
         if (isStatic)
             out << "static ";
+
+        if (isVirtualDecl && m->isPure())
+            out << "abstract ";
 
         if (isVirtualDecl && !m->isVirtual())
             out << "final ";
