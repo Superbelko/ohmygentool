@@ -560,19 +560,19 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
     declStack.push_back(decl);
 
     bool forwardDecl = decl->getBraceRange().isInvalid();
-    if (forwardDecl)
-        forwardTypes.emplace(std::make_pair(classOrStructName, true));
-
-    if (auto fw = forwardTypes.find(classOrStructName); fw != forwardTypes.end() && fw->second == true)
-    {
-        fw->second = forwardDecl;
-    }
+    if (forwardTypes.find(classOrStructName) == forwardTypes.end())
+        forwardTypes.emplace(std::make_pair(classOrStructName, forwardDecl));
 
     if (forwardDecl)
         return;
 
     if (!addType(decl, storedTypes))
         return;
+
+    if (auto fw = forwardTypes.find(classOrStructName); fw != forwardTypes.end() && fw->second == true)
+    {
+        fw->second = forwardDecl;
+    }
 
     handledClassDecl = true;
     
