@@ -46,6 +46,20 @@ bool DPrinterHelper_PointerReturn::handledStmt(clang::Stmt* E, llvm::raw_ostream
 namespace
 {
 
+std::string wrapRefHelper(QualType T, VarDecl* D)
+{
+    std::string s;
+    llvm::raw_string_ostream os(s);
+    // ret type
+    os << DlangBindGenerator::toDStyle(T) << " ";
+    // variable name
+    os << DlangBindGenerator::sanitizedIdentifier(D->getName()) << "() { return ";
+    // helper function body
+    printPrettyD(D->getInit(), os, nullptr, *DlangBindGenerator::g_printPolicy);
+    os << "; }";
+    return os.str();
+}
+
 template<typename T>
 class StmtFinderVisitor : public RecursiveASTVisitor<StmtFinderVisitor<T>>
 {
@@ -160,8 +174,14 @@ public:
        if  ( D->getStorageClass() == StorageClass::SC_Static )
             OS << "__gshared static ";
 
+        bool isRef = T->isReferenceType() && D->getInit();
+        if (isRef)
+        {
+            OS << wrapRefHelper(T,D);
+            return false;
+        }
         //printDeclType(T, D->getName());
-        auto typeString = DlangBindGenerator::toDStyle(adjustForVariable(T, const_cast<ASTContext*>(Context)));
+        auto typeString = DlangBindGenerator::toDStyle(T);
         OS << typeString << " " << DlangBindGenerator::sanitizedIdentifier(D->getName());
         Expr *Init = D->getInit();
         if (!Policy.SuppressInitializers && Init)
@@ -920,9 +940,9 @@ public:
         // Try get pointer instead of reference because there is no ref variables
         bool isRef = Node->getTypeAsWritten()->isReferenceType();
         OS << "cast(";
-        if (isRef)
-            OS << DlangBindGenerator::toDStyle(adjustForVariable(Node->getTypeAsWritten(), const_cast<ASTContext*>(Context)));
-        else
+        //if (isRef)
+        //    OS << DlangBindGenerator::toDStyle(adjustForVariable(Node->getTypeAsWritten(), const_cast<ASTContext*>(Context)));
+        //else
             OS << DlangBindGenerator::toDStyle(Node->getTypeAsWritten());
         OS << ")(";
         if (isRef)
