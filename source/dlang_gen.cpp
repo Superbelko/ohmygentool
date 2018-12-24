@@ -1473,7 +1473,7 @@ void DlangBindGenerator::fieldIterate(const clang::RecordDecl *decl)
         }
 
         auto fieldTypeStr = toDStyle(adjustForVariable(it->getType(), &decl->getASTContext()));
-        if (!it->getIdentifier())
+        if (!it->getIdentifier() && !bitfield)
         {
             if (fieldTypeStr.compare("_anon") != -1)
             {
@@ -1485,12 +1485,17 @@ void DlangBindGenerator::fieldIterate(const clang::RecordDecl *decl)
 
         if (bitfield)
         {
+            // TODO: close this bitfield and start a new one on zero width
             IndentBlock _indent(out, 4);
             if (isPrevIsBitfield) // we are still on same line
                 out << "," << std::endl;
             out << fieldTypeStr << ", ";
-            out << "\"" << sanitizedIdentifier(it->getName().str()) << "\""
-                << ", ";
+            out << "\"";
+            if (it->getIdentifier())
+                out << sanitizedIdentifier(it->getName().str());
+            else 
+                out << "";
+            out << "\", ";
             out << bitwidthExpr;
         }
         else
