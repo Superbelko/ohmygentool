@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.0) # 3.10 for VS /std:c++17 switch
 project(gentool)
 
+option(GENTOOL_LIB "Build gentool as library")
+
 find_package(LLVM REQUIRED CONFIG)
 find_package(Clang REQUIRED CONFIG HINTS "${LLVM_DIR}/../clang") # assuming LLVM_DIR is llvm-build/lib/cmake/llvm
 
@@ -29,14 +31,22 @@ check_cxx_source_compiles(
     " GENTOOL_IS_STABLE_FS
 )
 
-# Now build our tools
-add_executable(gentool 
+SET(SOURCE_LIST 
     source/main.cpp 
     source/ppcallbacks.cpp 
     source/dlang_gen.cpp 
     source/printprettyd.cpp 
     source/iohelpers.cpp
 )
+
+if (GENTOOL_LIB)
+    add_library(gentool ${SOURCE_LIST})
+    target_compile_definitions(gentool PRIVATE USE_LIB_TARGET)
+else()
+    add_executable(gentool ${SOURCE_LIST})
+endif()
+
+
 
 # Find the libraries that correspond to the LLVM components
 # that we wish to use
