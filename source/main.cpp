@@ -453,6 +453,7 @@ private:
 
 static llvm::cl::OptionCategory MyToolCategory("My tool options");
 
+#ifndef USE_LIB_TARGET
 
 
 int main(int argc, const char **argv) 
@@ -623,4 +624,6 @@ int main(int argc, const char **argv)
 	allRecords.getImpl().finalize();
 
 	return toolres;
-}
+} // main()
+
+#endif // ifndef USE_LIB_TARGET
