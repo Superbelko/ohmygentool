@@ -37,11 +37,12 @@ SET(SOURCE_LIST
     source/dlang_gen.cpp 
     source/printprettyd.cpp 
     source/iohelpers.cpp
+    source/compiler.cpp
 )
 
 if (GENTOOL_LIB)
     add_library(gentool ${SOURCE_LIST})
-    target_compile_definitions(gentool PRIVATE USE_LIB_TARGET)
+    target_compile_definitions(gentool PRIVATE USE_LIB_TARGET GENTOOL_EXPORT_SYMBOLS)
 else()
     add_executable(gentool ${SOURCE_LIST})
 endif()
