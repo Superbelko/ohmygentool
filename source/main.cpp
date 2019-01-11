@@ -400,6 +400,140 @@ void replaceEnvVar(std::string& path)
 }
 
 
+void replaceEnvVars(gentool::InputOptions& input)
+{
+	for (auto& p: input.paths)
+		replaceEnvVar(p);
+	for (auto& p: input.includes)
+		replaceEnvVar(p);
+	for (auto& p: input.systemIncludes)
+		replaceEnvVar(p);
+}
+
+
+std::tuple<int, bool> initGlobalLangOptions(gentool::InputOptions& input)
+{
+	int standardVersion = -1;
+	bool isCpp = true;
+
+	clang::LangOptions langOptions;
+	if (!input.standard.empty())
+	{
+		// get actual standard
+		auto pp = input.standard.find("++");
+		if (pp == std::string::npos)
+		{
+			isCpp = false;
+			pp = 1;
+		}
+		else
+		{
+			pp += 2;
+		}
+		standardVersion = std::stoi(input.standard.substr(pp));
+	}
+	langOptions.CPlusPlus = isCpp;
+	langOptions.C99 = !isCpp && standardVersion == 99;
+	langOptions.C11 = !isCpp && standardVersion == 11;
+	langOptions.C17 = !isCpp && standardVersion == 17;
+	langOptions.CPlusPlus11 = isCpp && standardVersion >= 11;
+	langOptions.CPlusPlus14 = isCpp && standardVersion >= 14;
+	langOptions.CPlusPlus17 = isCpp && standardVersion >= 17;
+	langOptions.CPlusPlus2a = isCpp && standardVersion >= 18; // TODO: actual repr for this
+	langOptions.Bool = 1;
+	langOptions.RTTI = 0;
+	langOptions.DoubleSquareBracketAttributes = 1;
+	//#if defined(_MSC_VER)
+	//langOptions.MSCompatibilityVersion = LangOptions::MSVCMajorVersion::MSVC2015;
+	//langOptions.MSCompatibilityVersion = 19;
+	//langOptions.MicrosoftExt = 1;
+	//langOptions.MSVCCompat = !isCpp;
+	//langOptions.MSBitfields = 1;
+	langOptions.DeclSpecKeyword = 1;
+	//langOptions.DelayedTemplateParsing = 1; // MSVC parses templates at the time of actual use
+	//#endif
+	
+	if (DlangBindGenerator::g_printPolicy)
+		delete DlangBindGenerator::g_printPolicy;
+	DlangBindGenerator::g_printPolicy = new PrintingPolicy(langOptions);
+	DlangBindGenerator::g_printPolicy->SuppressScope = true;
+	DlangBindGenerator::g_printPolicy->Bool = true;
+	DlangBindGenerator::g_printPolicy->SuppressTagKeyword = true;
+	DlangBindGenerator::g_printPolicy->ConstantsAsWritten = true;   // prevent prettifying masks and other unpleasent things
+	DlangBindGenerator::g_printPolicy->SuppressImplicitBase = true; // no "this->",  please
+
+	return std::make_tuple(standardVersion, isCpp);
+}
+
+
+std::vector<std::string> collectInputSources(gentool::InputOptions& input)
+{
+	std::vector<std::string> sources;
+	std::error_code _;
+	for (const auto& p : input.paths)
+	{
+		if (fs::is_directory(p))
+		for (auto& it : fs::recursive_directory_iterator(fs::canonical(p, _)))
+		{
+			if (fs::is_directory(it))
+				continue;
+
+			if ( !it.path().has_extension() )
+				continue;
+			
+			if ( !filterExt(it.path().extension().string()) )
+				continue;
+
+			sources.push_back(it.path().string());
+		}
+		else sources.push_back(p);
+	}
+	return sources;
+}
+
+
+std::vector<std::string> makeCompilerCommandLineArgs(gentool::InputOptions& input, const std::string& programPath, int standardVersion, bool isCpp)
+{
+	std::vector<std::string> cmd;
+	cmd.push_back(programPath); // must go first
+	{
+		auto src = collectInputSources(input);
+		cmd.insert(cmd.end(), src.begin(), src.end());
+	}
+	cmd.push_back("--");  // special token, after which follows the compiler flags
+
+	std::string stdVersion = "-std=";
+	if (isCpp)
+	{
+		cmd.push_back("-x"); cmd.push_back("c++");
+	}
+	if (standardVersion != -1) 
+	{
+		stdVersion.append(input.standard);
+	}
+	else
+	{
+		// defaults to c11/c++11
+		if (isCpp) 
+			stdVersion.append("c++11"); 
+		else 
+			stdVersion.append("c11");
+	}
+	cmd.push_back(stdVersion);
+
+	for (const auto& flag : input.cflags)
+		cmd.push_back(flag);
+	for (const auto& p : input.includes)
+		cmd.push_back(std::string("-I").append(p));
+	for (const auto& p : input.systemIncludes)
+		cmd.push_back(std::string("-I").append(p));
+	for (const auto& p : input.defines)
+		cmd.push_back(std::string("-D").append(p));
+
+	return cmd;
+}
+
+
 void llvmOnError(void *user_data, const std::string& reason, bool gen_crash_diag)
 {
 	std::cout << reason << std::endl;
@@ -458,22 +592,18 @@ static llvm::cl::OptionCategory MyToolCategory("My tool options");
 
 int main(int argc, const char **argv) 
 {
-	std::string path;
-
-	if (argc > 1)
-		path = argv[1];
-	else
+	if (argc < 2)
 	{
 		std::cout << HELP_MSG << std::endl;
 		return 1;
 	}
 
-	bool res = false;
 	gentool::InputOptions input;
 	gentool::OutputOptions output;
 	
 	try 
 	{
+		std::string path = argv[1];
 		std::tie(input, output) = readJSON(readFile(path));
 	}
 	catch (const std::runtime_error& err)
@@ -482,15 +612,20 @@ int main(int argc, const char **argv)
 		return 1;
 	}
 
-	for (auto& p: input.paths)
-		replaceEnvVar(p);
-	for (auto& p: input.includes)
-		replaceEnvVar(p);
-	for (auto& p: input.systemIncludes)
-		replaceEnvVar(p);
+	replaceEnvVars(input);
+
+	auto [standardVersion, isCpp] = initGlobalLangOptions(input);
+	auto programPath = std::string(argv[0]);
+	std::vector<std::string> cmd = makeCompilerCommandLineArgs(input, programPath, standardVersion, isCpp);
+	std::vector<const char*> ptrList;
+	// make array of string pointers
+	for(const auto& p : cmd)
+	{
+		ptrList.push_back(p.c_str());
+	}
+	int argn = ptrList.size();
 
 	clang::ast_matchers::MatchFinder Finder;
-
 	RecordDeclMatcher<DlangBindGenerator> allRecords;
 	Finder.addMatcher(recordDeclMatcher, &allRecords);
 	Finder.addMatcher(typedefDeclMatcher, &allRecords);
@@ -498,128 +633,21 @@ int main(int argc, const char **argv)
 	Finder.addMatcher(enumDeclMatcher, &allRecords);
 	Finder.addMatcher(globalVarsMatcher, &allRecords);
 
-	bool isCpp = true;
-	int standardVersion = -1;
-	{
-		clang::LangOptions langOptions;
-
-		if (!input.standard.empty())
-		{
-			// get actual standard
-			auto pp = input.standard.find("++");
-			if (pp == std::string::npos)
-			{
-				isCpp = false;
-				pp = 1;
-			}
-			else
-			{
-				pp += 2;
-			}
-			standardVersion = std::stoi(input.standard.substr(pp));
-		}
-
-		langOptions.CPlusPlus = isCpp;
-		langOptions.C99 = !isCpp && standardVersion == 99;
-		langOptions.C11 = !isCpp && standardVersion == 11;
-		langOptions.C17 = !isCpp && standardVersion == 17;
-		langOptions.CPlusPlus11 = isCpp && standardVersion >= 11;
-		langOptions.CPlusPlus14 = isCpp && standardVersion >= 14;
-		langOptions.CPlusPlus17 = isCpp && standardVersion >= 17;
-		langOptions.CPlusPlus2a = isCpp && standardVersion >= 18; // TODO: actual repr for this
-		langOptions.Bool = 1;
-		langOptions.RTTI = 0;
-		langOptions.DoubleSquareBracketAttributes = 1;
-		//#if defined(_MSC_VER)
-		//langOptions.MSCompatibilityVersion = LangOptions::MSVCMajorVersion::MSVC2015;
-		//langOptions.MSCompatibilityVersion = 19;
-		//langOptions.MicrosoftExt = 1;
-		//langOptions.MSVCCompat = !isCpp;
-		//langOptions.MSBitfields = 1;
-		langOptions.DeclSpecKeyword = 1;
-		//langOptions.DelayedTemplateParsing = 1; // MSVC parses templates at the time of actual use
-		//#endif
-		
-		if (DlangBindGenerator::g_printPolicy)
-			delete DlangBindGenerator::g_printPolicy;
-		DlangBindGenerator::g_printPolicy = new PrintingPolicy(langOptions);
-		DlangBindGenerator::g_printPolicy->SuppressScope = true;
-		DlangBindGenerator::g_printPolicy->Bool = true;
-		DlangBindGenerator::g_printPolicy->SuppressTagKeyword = true;
-		DlangBindGenerator::g_printPolicy->ConstantsAsWritten = true;   // prevent prettifying masks and other unpleasent things
-		DlangBindGenerator::g_printPolicy->SuppressImplicitBase = true; // no "this->",  please
-	}
-
-	std::vector<std::string> sources;
-	std::vector<const char*> ptrList;
-	std::error_code _;
-	sources.push_back(argv[0]); // must go first
-	for (const auto& p : input.paths)
-	{
-		if (fs::is_directory(p))
-		for (auto& it : fs::recursive_directory_iterator(fs::canonical(p, _)))
-		{
-			if (fs::is_directory(it))
-				continue;
-
-			if ( !it.path().has_extension() )
-				continue;
-			
-			if ( !filterExt(it.path().extension().string()) )
-				continue;
-
-			sources.push_back(it.path().string());
-		}
-		else sources.push_back(p);
-	}
-	sources.push_back("--");  // special token, after which follows the compiler flags
-
-	std::string stdVersion = "-std=";
-	if (isCpp)
-	{
-		sources.push_back("-x"); sources.push_back("c++");
-	}
-	if (standardVersion != -1) 
-	{
-		stdVersion.append(input.standard);
-	}
-	else
-	{
-		// defaults to c11/c++11
-		if (isCpp) 
-			stdVersion.append("c++11"); 
-		else 
-			stdVersion.append("c11");
-	}
-	sources.push_back(stdVersion);
-
-	for (const auto& flag : input.cflags)
-		sources.push_back(flag);
-	for (const auto& p : input.includes)
-		sources.push_back(std::string("-I").append(p));
-	for (const auto& p : input.systemIncludes)
-		sources.push_back(std::string("-I").append(p));
-	for (const auto& p : input.defines)
-		sources.push_back(std::string("-D").append(p));
-
-	for(const auto& p : sources)  // merge all
-	{
-		ptrList.push_back(p.c_str());
-	}
-	int argn = ptrList.size();
-
-	llvm::install_fatal_error_handler(llvmOnError);
-	CommonOptionsParser op(argn, ptrList.data(), MyToolCategory); // feed in argc, argv, kind of
-	ClangTool tool(op.getCompilations(), op.getSourcePathList());
-
 	allRecords.getImpl().setOptions(&input, &output);
 	allRecords.getImpl().prepare();
+
+
+	llvm::install_fatal_error_handler(llvmOnError);
+
+	CommonOptionsParser op(argn, ptrList.data(), MyToolCategory); // feed in argc, argv, kind of
+	ClangTool tool(op.getCompilations(), op.getSourcePathList());
 
 	// Run preprocessor callbacks pass before normal pass
 	PPCallbacksFrontendActionFactory Factory(&allRecords.getImpl());
 	tool.run(&Factory);
 
 	auto toolres = tool.run(newFrontendActionFactory(&Finder).get());
+
 
 	allRecords.getImpl().finalize();
 
