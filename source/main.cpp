@@ -83,7 +83,8 @@ USAGE:
 
 
 template<typename T = IAbstractGenerator>
-class RecordDeclMatcher : public MatchFinder::MatchCallback
+class [[deprecated("Deprecated. Consider using normal clang::ASTConsumer instead")]] 
+	RecordDeclMatcher : public MatchFinder::MatchCallback
 {
 public:
 	virtual void run(const MatchFinder::MatchResult &Result);
@@ -160,6 +161,86 @@ DeclarationMatcher globalVarsMatcher = varDecl(
 ).bind("globalVarDecl");
 
 
+std::string getPathForDecl(const Decl* decl, SourceManager& srcMgr)
+{
+	std::string path;
+
+	auto sfile = srcMgr.getFileID(decl->getLocation());
+	auto* f = srcMgr.getFileEntryForID(sfile);
+	if (f)
+		path = f->getName();
+	else { 
+		std::string s;
+		llvm::raw_string_ostream os(s);
+		auto sloc = sfile.isValid() ? decl->getLocation() : decl->getBeginLoc();
+		srcMgr.getExpansionLoc(sloc).print(os, srcMgr);
+		path = os.str();
+	}
+
+	return path;
+}
+
+
+// Do normal generator action on decl
+void handleDecl(Decl* decl, IAbstractGenerator* handler)
+{
+	auto path = getPathForDecl(decl, decl->getASTContext().getSourceManager());
+	if (!handler->isRelevantPath(path))
+		return;
+
+	if (isa<FunctionDecl>(decl))
+	{
+		if (decl->getDeclContext()->getDeclKind() == Decl::Kind::TranslationUnit
+			|| decl->getDeclContext()->getDeclKind() == Decl::Kind::Namespace)
+		{
+			handler->onFunction(cast<FunctionDecl>(decl));
+		}
+	}
+
+	else if (isa<RecordDecl>(decl))
+	{
+		auto rd = cast<RecordDecl>(decl);
+		handler->onStructOrClassEnter(rd);
+		handler->onStructOrClassLeave(rd);
+	}
+
+	else if (isa<FunctionTemplateDecl>(decl))
+	{
+		auto ft = cast<FunctionTemplateDecl>(decl);
+		if (ft && ft->getTemplatedDecl())
+			handleDecl(ft->getTemplatedDecl(), handler);
+	}
+
+	else if (isa<ClassTemplateDecl>(decl))
+	{
+		auto ct = cast<ClassTemplateDecl>(decl);
+		if (ct && ct->getTemplatedDecl())
+			handleDecl(ct->getTemplatedDecl(), handler);
+	}
+
+	else if (isa<EnumDecl>(decl))
+	{
+		handler->onEnum(cast<EnumDecl>(decl));
+	}
+
+	else if (isa<TypedefDecl>(decl))
+	{
+		handler->onTypedef(cast<TypedefDecl>(decl));
+	}
+
+	else if (isa<VarDecl>(decl))
+	{
+		handler->onGlobalVar(cast<VarDecl>(decl));
+	}
+
+	else if (isa<NamespaceDecl>(decl))
+	{
+		auto ns = cast<NamespaceDecl>(decl);
+		for (auto& d : ns->decls())
+			handleDecl(d, handler);
+	}
+}
+
 
 template<typename T>
 void RecordDeclMatcher<T>::run(const MatchFinder::MatchResult &Result)
@@ -170,10 +251,9 @@ void RecordDeclMatcher<T>::run(const MatchFinder::MatchResult &Result)
 	const clang::FunctionDecl *fd = Result.Nodes.getNodeAs<FunctionDecl>("funDecl");
 	const clang::EnumDecl *ed = Result.Nodes.getNodeAs<EnumDecl>("enumDecl");
 	const clang::VarDecl *glob = Result.Nodes.getNodeAs<VarDecl>("globalVarDecl");
-	bool isClass = false;
-	std::string path;
 	const clang::Decl* rec; 
 
+	// TODO: this can be compacted if all matches has same binding name
 	if (st)
 	{
 		rec = st;
@@ -195,53 +275,7 @@ void RecordDeclMatcher<T>::run(const MatchFinder::MatchResult &Result)
 		rec = glob;
 	}
 
-	std::string s;
-	llvm::raw_string_ostream os(s);
-
-	auto sfile = srcMgr.getFileID(rec->getLocation());
-	auto* f = srcMgr.getFileEntryForID(sfile);
-	if (f)
-		path = f->getName();
-	else { 
-		if (sfile.isValid())
-			srcMgr.getExpansionLoc(rec->getLocation()).print(os, srcMgr);
-		else
-			srcMgr.getExpansionLoc(rec->getBeginLoc()).print(os, srcMgr);
-		path = os.str();
-	}
-	
-	if (!impl.isRelevantPath(path))
-		return;
-
-	if (ed)
-	{
-		impl.onEnum(ed);
-	}
-	else if (st)
-	{
-		if (st->isClass() || st->isStruct())
-		{
-			isClass = true;
-			impl.onStructOrClassEnter(st);
-		}
-
-		if (isClass)
-		{
-			impl.onStructOrClassLeave(st);
-		}
-	}
-	else if (td)
-	{
-		impl.onTypedef(td);
-	}
-	else if (fd)
-	{
-		impl.onFunction(fd);
-	}
-	else if (glob)
-	{
-		impl.onGlobalVar(glob);
-	}
+	handleDecl( const_cast<Decl*>(rec), &impl);
 }
 
 
@@ -547,11 +581,27 @@ namespace
 class PPCallbackConsumer : public ASTConsumer
 {
 public:
-	PPCallbackConsumer(Preprocessor &PP, DlangBindGenerator* Listener)
+	PPCallbackConsumer(Preprocessor &PP, DlangBindGenerator* Listener) : Listener(Listener)
 	{
 		// PP takes ownership.
 		PP.addPPCallbacks(llvm::make_unique<PPCallbacksTracker>(PP, Listener));
 	}
+#if 0
+	bool HandleTopLevelDecl(DeclGroupRef D)
+	{
+		for (auto& decl : D)
+			handleDecl(decl, Listener);
+		return true;
+	}
+
+	void HandleTranslationUnit(ASTContext &Ctx) 
+	{
+		Listener->onEndFile(std::string_view());
+	}
+#endif
+
+private:
+	DlangBindGenerator* Listener;
 };
 
 class PPCallbackAction : public SyntaxOnlyAction

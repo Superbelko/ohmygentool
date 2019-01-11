@@ -825,6 +825,9 @@ void DlangBindGenerator::onFunction(const clang::FunctionDecl *decl)
     const bool hasNamespace = decl->getDeclContext()->isNamespace();
     const auto externStr = externAsString(decl->getDeclContext()->isExternCContext());
 
+    if (!fn->getIdentifier())
+        return;
+
     // linkage & namespace
     if (!hasNamespace)
         out << "extern(" << externStr << ")" << std::endl;
