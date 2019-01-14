@@ -575,18 +575,17 @@ void llvmOnError(void *user_data, const std::string& reason, bool gen_crash_diag
 
 // Frontend action stuff:
 
-namespace
-{
-// Consumer is responsible for setting up the callbacks.
-class PPCallbackConsumer : public ASTConsumer
+
+// Combines preprocessor and AST callbacks 
+class GentoolASTConsumer : public ASTConsumer
 {
 public:
-	PPCallbackConsumer(Preprocessor &PP, DlangBindGenerator* Listener) : Listener(Listener)
+	GentoolASTConsumer(Preprocessor &PP, DlangBindGenerator* Listener) : Listener(Listener)
 	{
 		// PP takes ownership.
 		PP.addPPCallbacks(llvm::make_unique<PPCallbacksTracker>(PP, Listener));
 	}
-#if 0
+
 	bool HandleTopLevelDecl(DeclGroupRef D)
 	{
 		for (auto& decl : D)
@@ -598,42 +597,40 @@ public:
 	{
 		Listener->onEndFile(std::string_view());
 	}
-#endif
 
 private:
 	DlangBindGenerator* Listener;
 };
 
-class PPCallbackAction : public SyntaxOnlyAction
+class GentoolGenAction : public SyntaxOnlyAction
 {
 public:
-	PPCallbackAction(DlangBindGenerator* Listener) : Listener(Listener) {}
+	GentoolGenAction(DlangBindGenerator* Listener) : Listener(Listener) {}
 
 protected:
 	std::unique_ptr<clang::ASTConsumer>
 	CreateASTConsumer(CompilerInstance &CI, StringRef InFile) override
 	{
 		Listener->setSourceManager(&CI.getSourceManager());
-		return llvm::make_unique<PPCallbackConsumer>(CI.getPreprocessor(), Listener);
+		return llvm::make_unique<GentoolASTConsumer>(CI.getPreprocessor(), Listener);
 	}
 private:
 	DlangBindGenerator* Listener;
 };
 
-class PPCallbacksFrontendActionFactory : public FrontendActionFactory
+class GentoolFrontendActionFactory : public FrontendActionFactory
 {
 public:
-	PPCallbacksFrontendActionFactory(DlangBindGenerator* Listener) : Listener(Listener) {}
+	GentoolFrontendActionFactory(DlangBindGenerator* Listener) : Listener(Listener) {}
 
-	PPCallbackAction *create() override
+	GentoolGenAction *create() override
 	{
-		return new PPCallbackAction(Listener);
+		return new GentoolGenAction(Listener);
 	}
 private:
 	DlangBindGenerator* Listener;
 };
 
-} // namespace
 
 static llvm::cl::OptionCategory MyToolCategory("My tool options");
 
@@ -667,39 +664,30 @@ int main(int argc, const char **argv)
 	auto [standardVersion, isCpp] = initGlobalLangOptions(input);
 	auto programPath = std::string(argv[0]);
 	std::vector<std::string> cmd = makeCompilerCommandLineArgs(input, programPath, standardVersion, isCpp);
-	std::vector<const char*> ptrList;
+	std::vector<const char*> cmdArgv;
 	// make array of string pointers
 	for(const auto& p : cmd)
 	{
-		ptrList.push_back(p.c_str());
+		cmdArgv.push_back(p.c_str());
 	}
-	int argn = ptrList.size();
-
-	clang::ast_matchers::MatchFinder Finder;
-	RecordDeclMatcher<DlangBindGenerator> allRecords;
-	Finder.addMatcher(recordDeclMatcher, &allRecords);
-	Finder.addMatcher(typedefDeclMatcher, &allRecords);
-	Finder.addMatcher(funDeclMatcher, &allRecords);
-	Finder.addMatcher(enumDeclMatcher, &allRecords);
-	Finder.addMatcher(globalVarsMatcher, &allRecords);
-
-	allRecords.getImpl().setOptions(&input, &output);
-	allRecords.getImpl().prepare();
+	int cmdArgc = (int)cmdArgv.size();
 
 
 	llvm::install_fatal_error_handler(llvmOnError);
 
-	CommonOptionsParser op(argn, ptrList.data(), MyToolCategory); // feed in argc, argv, kind of
+	CommonOptionsParser op(cmdArgc, cmdArgv.data(), MyToolCategory); // feed in argc, argv, kind of
 	ClangTool tool(op.getCompilations(), op.getSourcePathList());
 
-	// Run preprocessor callbacks pass before normal pass
-	PPCallbacksFrontendActionFactory Factory(&allRecords.getImpl());
-	tool.run(&Factory);
 
-	auto toolres = tool.run(newFrontendActionFactory(&Finder).get());
+	DlangBindGenerator generator;
 
+	generator.setOptions(&input, &output);
+	generator.prepare();
 
-	allRecords.getImpl().finalize();
+	GentoolFrontendActionFactory Factory(&generator);
+	auto toolres = tool.run(&Factory);
+
+	generator.finalize();
 
 	return toolres;
 } // main()
