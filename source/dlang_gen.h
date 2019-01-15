@@ -91,6 +91,7 @@ public:
 protected:
     std::unique_ptr<NamespacePolicy> nsPolicy;
     clang::SourceManager* SourceMgr;
+    clang::Sema* sema;
 	std::ofstream fileOut;
     std::ofstream mangleOut;
 	OutStreamHelper out = OutStreamHelper(nullptr/*&std::cout*/, &fileOut);
@@ -140,6 +141,7 @@ public:
     // On define macro event
     void onMacroDefine(const clang::Token* name, const clang::MacroDirective* macro);
     void setSourceManager(clang::SourceManager* SM) { this->SourceMgr = SM; }
+    void setSema(clang::Sema* Sema) { this->sema = Sema; }
 
     // Get file path and line & column parts (if any) from source location
     static std::tuple<std::string, std::string> getFSPathPart(const std::string_view loc);

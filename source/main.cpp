@@ -580,29 +580,28 @@ void llvmOnError(void *user_data, const std::string& reason, bool gen_crash_diag
 class GentoolASTConsumer : public ASTConsumer
 {
 public:
-	GentoolASTConsumer(Preprocessor &PP, DlangBindGenerator* Listener) : Listener(Listener)
+	GentoolASTConsumer(CompilerInstance &CI, DlangBindGenerator* Listener) : Listener(Listener), CI(CI)
 	{
+		auto& PP = CI.getPreprocessor();
 		// PP takes ownership.
 		PP.addPPCallbacks(llvm::make_unique<PPCallbacksTracker>(PP, Listener));
 	}
 
-	bool HandleTopLevelDecl(DeclGroupRef D)
-	{
-		for (auto& decl : D)
-			handleDecl(decl, Listener);
-		return true;
-	}
-
 	void HandleTranslationUnit(ASTContext &Ctx) 
 	{
+		Listener->setSema(&CI.getSema());
+		if (auto tu = Ctx.getTranslationUnitDecl())
+			for(auto d : tu->decls())
+				handleDecl(d, Listener);
 		Listener->onEndFile(std::string_view());
 	}
 
 private:
 	DlangBindGenerator* Listener;
+	CompilerInstance &CI;
 };
 
-class GentoolGenAction : public SyntaxOnlyAction
+class GentoolGenAction : public ASTFrontendAction
 {
 public:
 	GentoolGenAction(DlangBindGenerator* Listener) : Listener(Listener) {}
@@ -612,7 +611,7 @@ protected:
 	CreateASTConsumer(CompilerInstance &CI, StringRef InFile) override
 	{
 		Listener->setSourceManager(&CI.getSourceManager());
-		return llvm::make_unique<GentoolASTConsumer>(CI.getPreprocessor(), Listener);
+		return llvm::make_unique<GentoolASTConsumer>(CI, Listener);
 	}
 private:
 	DlangBindGenerator* Listener;

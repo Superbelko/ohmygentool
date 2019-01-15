@@ -27,6 +27,7 @@
 #include "clang/Parse/ParseAST.h"
 #include "clang/CodeGen/CodeGenAction.h"
 #include "clang/Lex/PreprocessorOptions.h"
+#include "clang/Sema/Sema.h"
 
 #include "iohelpers.h"
 
@@ -818,6 +819,9 @@ void DlangBindGenerator::onEnum(const clang::EnumDecl *decl)
 
 void DlangBindGenerator::onFunction(const clang::FunctionDecl *decl)
 {
+    if (!decl->getIdentifier())
+        return;
+
     if (!addType(decl, functionDecls))
         return;
 
@@ -825,8 +829,6 @@ void DlangBindGenerator::onFunction(const clang::FunctionDecl *decl)
     const bool hasNamespace = decl->getDeclContext()->isNamespace();
     const auto externStr = externAsString(decl->getDeclContext()->isExternCContext());
 
-    if (!fn->getIdentifier())
-        return;
 
     // linkage & namespace
     if (!hasNamespace)
@@ -1558,6 +1560,13 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
 
     for (const auto m : decl->methods())
     {
+        // Try to parse delayed templates to get body AST available
+        if (m->isLateTemplateParsed())
+        {
+            auto& LPT = *sema->LateParsedTemplateMap.find(m)->second;
+            sema->LateTemplateParser(sema->OpaqueParser, LPT);
+        }
+
         std::string mangledName;
         std::string funcName;
         bool noRetType = false;
@@ -1652,7 +1661,7 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
         }
 
 
-        bool possibleOverride = !(isCtor || isDtor) && overridesBaseOf(m, decl);
+        bool possibleOverride = !m->isPure() && (!(isCtor || isDtor) && overridesBaseOf(m, decl));
         bool cantOverride = possibleOverride && !(m->hasAttr<OverrideAttr>() || m->isVirtual());
         bool commentOut = (!isVirtualDecl && isDefaultCtor) || idAssign || (isVirtualDecl && cantOverride);
         // default ctor for struct not allowed
@@ -1755,7 +1764,7 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
             out << "/* MANGLING OVERRIDE NOT YET FINISHED, ADJUST MANUALLY! */ ";
         
         // write function body
-        if (!skipBodies && m->isInlined() && m->hasInlineBody() && !isDtor)
+        if (!skipBodies && m->isInlined() && m->hasInlineBody())
         {
             auto writeMultilineExpr = [this, commentOut, ast](auto expr, bool ptrRet = false) {
                 std::string s;
@@ -1784,7 +1793,7 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
             if (auto body = dyn_cast<CompoundStmt>(m->getBody())) // can it actually be anything else?
                 isEmptyBody = body->body_empty();
 
-            if (isCtor && !isTemplated)
+            if (isCtor)
             {
                 const auto ctdecl = cast<CXXConstructorDecl>(m);
                 hasInitializerList = ctdecl->getNumCtorInitializers() != 0
@@ -1855,14 +1864,16 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
             }
 
             // close extra braces
-            if (hasInitializerList && isCtor && !isTemplated)
+            if (hasInitializerList && isCtor)
             {
                 if (commentOut)
                     out << "//";
                 out << "}";
             }
+            else if (isEmptyBody)
+                out << " {} " << std::endl;
 
-            if (!m->getBody() || (isEmptyBody && !hasInitializerList))
+            if (!(m->getBody() || hasInitializerList))
             {
                 out << ";";
             }
