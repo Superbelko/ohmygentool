@@ -161,10 +161,11 @@ private:
     std::string externAsString(bool isExternC = false) const;
     void getJoinedNS(const clang::DeclContext* decl, std::vector<std::string>& parts);
     // Writes comma separted inheritance list, returns non-virtual bases to be used with 'alias this'
-    std::vector<const clang::Decl*> printBases(const clang::CXXRecordDecl* decl);
-    void methodIterate(const clang::CXXRecordDecl* decl);
-    void fieldIterate(const clang::RecordDecl* decl);
-    void innerDeclIterate(const clang::RecordDecl* decl);
+    void printBases(const clang::CXXRecordDecl* decl);
+    std::vector<const clang::CXXRecordDecl*> getNonVirtualBases(const clang::CXXRecordDecl* decl);
+    void handleMethods(const clang::CXXRecordDecl* decl);
+    void handleFields(const clang::RecordDecl* decl);
+    void handleInnerDecls(const clang::RecordDecl* decl);
     std::string getNextMixinId();
 
     // Functions below are specific to functions 

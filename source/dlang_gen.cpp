@@ -216,7 +216,7 @@ void printQualifier(NestedNameSpecifier* qualifier, llvm::raw_ostream& os)
 
 
 // Replaces C++ token like arrow operator or scope double-colon
-void textReplaceArrowColon(std::string& in)
+std::string& textReplaceArrowColon(std::string& in)
 {
     while (true)
     {
@@ -227,6 +227,7 @@ void textReplaceArrowColon(std::string& in)
                 break;
         in.replace(pos, 2, ".");
     }
+    return in;
 }
 
 
@@ -381,6 +382,38 @@ clang::QualType adjustForVariable(clang::QualType ty, clang::ASTContext* ctx)
         }
     }
     return ty;
+}
+
+
+void parseLateTemplate(FunctionDecl* fntemplate, clang::Sema* sema)
+{
+    auto& LPT = *sema->LateParsedTemplateMap.find(fntemplate)->second;
+    sema->LateTemplateParser(sema->OpaqueParser, LPT);
+}
+
+
+std::unique_ptr<MangleContext> makeManglingContext(ASTContext* ast)
+{
+    std::unique_ptr<MangleContext> result;
+    if (ast->getTargetInfo().getTargetOpts().Triple.find("windows") != std::string::npos)
+        result.reset(clang::MicrosoftMangleContext::create(*ast, ast->getDiagnostics()));
+    else
+        result.reset(clang::ItaniumMangleContext::create(*ast, ast->getDiagnostics()));
+    return result;
+}
+
+
+std::string getMangledName(const Decl* decl, MangleContext* ctx)
+{
+    std::string mangledName;
+    llvm::raw_string_ostream ostream(mangledName);
+    if (isa<FunctionDecl>(decl))
+        ctx->mangleName(cast<FunctionDecl>(decl), ostream);
+    else if (isa<CXXConstructorDecl>(decl))
+        ctx->mangleCXXCtor(cast<CXXConstructorDecl>(decl), CXXCtorType::Ctor_Complete, ostream);
+    else if (isa<CXXDestructorDecl>(decl))
+        ctx->mangleCXXDtor(cast<CXXDestructorDecl>(decl), CXXDtorType::Dtor_Complete, ostream);
+    return ostream.str();
 }
 
 
@@ -645,7 +678,7 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
     }
 
     out << classOrStructName;
-    std::vector<const clang::Decl*> nonvirt;
+
     if (cxxdecl)
     {
         TemplateDecl* tpd = nullptr;
@@ -687,7 +720,7 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
         }
         // adds list of base classes
         if (isVirtual)
-        nonvirt = printBases(cxxdecl);
+            printBases(cxxdecl);
     }
     out << std::endl;
     out << "{" << std::endl;
@@ -702,49 +735,43 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
         // TODO: precise mix-in where needed on finalize step
         //if (!isVirtual)
         //    out << "mixin RvalueRef;" << std::endl;
-        innerDeclIterate(decl);
+        handleInnerDecls(decl);
         int baseid = 0;
         if (isVirtual)
-        for (auto fakeBase : nonvirt)
         {
-            if (!isa<RecordDecl>(fakeBase))
-                continue;
-            auto brd = cast<RecordDecl>(fakeBase);
-            out << brd->getNameAsString() << " ";
-            out << "_b" << baseid << ";" << std::endl;
-            out << "alias " << "_b" << baseid << " this;" << std::endl;
-            baseid+=1;
+            for (auto fakeBase : getNonVirtualBases(cxxdecl))
+            {
+                if (!isa<RecordDecl>(fakeBase))
+                    continue;
+                auto brd = cast<RecordDecl>(fakeBase);
+                out << brd->getNameAsString() << " ";
+                out << "_b" << baseid << ";" << std::endl;
+                out << "alias " << "_b" << baseid << " this;" << std::endl;
+                baseid+=1;
+            }
         }
-        else if (cxxdecl) // if (isVirtual)
+        else if (cxxdecl)
         {
-            // TODO: refactor. this branch duplicates printBases() and previous condition
             unsigned int numBases = cxxdecl->getNumBases();
             for (const auto b : cxxdecl->bases())
             {
                 numBases--;
                 RecordDecl* rd = b.getType()->getAsRecordDecl(); 
-                if (rd && !hasVirtualMethods(cast<RecordDecl>(rd))){
+                if (rd && !hasVirtualMethods(cast<RecordDecl>(rd)))
                     out << rd->getNameAsString() << " ";
-                    out << "_b" << baseid << ";" << std::endl;
-                    if (baseid == 0) 
-                        out << "alias " << "_b" << baseid << " this;" << std::endl;
-                    baseid+=1;
-                }
-
                 // templated base class
-                if (b.getType()->getTypeClass() == Type::TypeClass::TemplateSpecialization)
-                {
+                else if (b.getType()->getTypeClass() == Type::TypeClass::TemplateSpecialization)
                     out << toDStyle(b.getType()) << " ";
-                    out << "_b" << baseid << ";" << std::endl;
-                    if (baseid == 0) 
-                        out << "alias " << "_b" << baseid << " this;" << std::endl;
-                    baseid+=1;
-                }
+
+                out << "_b" << baseid << ";" << std::endl;
+                if (baseid == 0) 
+                    out << "alias " << "_b" << baseid << " this;" << std::endl;
+                baseid+=1;
             }
         }
-        fieldIterate(decl);
+        handleFields(decl);
         if (cxxdecl)
-        methodIterate(cxxdecl);
+            handleMethods(cxxdecl);
     }
     out << "}" << std::endl;
 
@@ -842,16 +869,8 @@ void DlangBindGenerator::onFunction(const clang::FunctionDecl *decl)
         if (mangleAll && externStr == "C++")
         {
             clang::ASTContext& ast = fn->getASTContext();
-            std::unique_ptr<MangleContext> mangleCtx;
-            if (ast.getTargetInfo().getTargetOpts().Triple.find("windows") != std::string::npos)
-                mangleCtx.reset(clang::MicrosoftMangleContext::create(ast, ast.getDiagnostics()));
-            else
-                mangleCtx.reset(clang::ItaniumMangleContext::create(ast, ast.getDiagnostics()));
-            std::string mangledName;
-            llvm::raw_string_ostream ostream(mangledName);
-            mangleCtx->mangleName(fn, ostream);
-            ostream.flush();
-            out << "pragma(mangle, \"" << mangledName << "\")" << std::endl;
+            std::unique_ptr<MangleContext> mangleCtx = makeManglingContext(&ast);
+            out << "pragma(mangle, \"" << getMangledName(fn, mangleCtx.get()) << "\")" << std::endl;
         }
     }
 
@@ -1312,9 +1331,8 @@ void DlangBindGenerator::getJoinedNS(const clang::DeclContext *decl, std::vector
     getJoinedNS(decl->getParent(), parts);
 }
 
-std::vector<const clang::Decl*> DlangBindGenerator::printBases(const clang::CXXRecordDecl *decl)
+void DlangBindGenerator::printBases(const clang::CXXRecordDecl *decl)
 {
-    std::vector<const clang::Decl*> nonvirt;
     unsigned int numBases = decl->getNumBases();
     bool first = true;
 
@@ -1323,10 +1341,8 @@ std::vector<const clang::Decl*> DlangBindGenerator::printBases(const clang::CXXR
     {
         numBases--;
         Decl* rd = b.getType()->getAsRecordDecl(); 
-        if (rd && !hasVirtualMethods(cast<RecordDecl>(rd))){
-            nonvirt.push_back(rd);
+        if (rd && !hasVirtualMethods(cast<RecordDecl>(rd)))
             continue;
-        }
         
         if (first) {
             out << " : ";
@@ -1336,12 +1352,26 @@ std::vector<const clang::Decl*> DlangBindGenerator::printBases(const clang::CXXR
         if (numBases)
             out << ", ";
     }
+}
+
+
+std::vector<const clang::CXXRecordDecl*> DlangBindGenerator::getNonVirtualBases(const clang::CXXRecordDecl* decl)
+{
+    std::vector<const clang::CXXRecordDecl*> nonvirt;
+
+    for (const auto b : decl->bases())
+    {
+        auto rd = b.getType()->getAsRecordDecl(); 
+        if (rd) 
+            if (auto cxxrec = cast<CXXRecordDecl>(rd); !hasVirtualMethods(cxxrec))
+                nonvirt.push_back(cxxrec);
+    }
 
     return nonvirt;
 }
 
 
-void DlangBindGenerator::innerDeclIterate(const clang::RecordDecl *decl)
+void DlangBindGenerator::handleInnerDecls(const clang::RecordDecl *decl)
 {
     for (const auto it : decl->decls())
     {
@@ -1392,7 +1422,7 @@ void DlangBindGenerator::innerDeclIterate(const clang::RecordDecl *decl)
 }
 
 
-void DlangBindGenerator::fieldIterate(const clang::RecordDecl *decl)
+void DlangBindGenerator::handleFields(const clang::RecordDecl *decl)
 {
     // TODO: count in types and alignment for bit fields
 
@@ -1480,9 +1510,11 @@ void DlangBindGenerator::fieldIterate(const clang::RecordDecl *decl)
         auto fieldTypeStr = toDStyle(adjustForVariable(it->getType(), &decl->getASTContext()));
         if (!it->getIdentifier() && !bitfield)
         {
-            if (fieldTypeStr.compare("_anon") != -1)
+            constexpr const int ANON_PREFIX_LEN = 5;
+            static const auto ANON_PREFIX = "_anon";
+            if (fieldTypeStr.compare(ANON_PREFIX) != -1)
             {
-                auto n = std::stoi(fieldTypeStr.substr(5));
+                auto n = std::stoi(fieldTypeStr.substr(ANON_PREFIX_LEN));
                 const auto& newId = decl->getASTContext().Idents.get(std::string("a") + std::to_string(n) + "_");
                 const_cast<FieldDecl*>(it)->setDeclName(DeclarationName(&newId));
             }
@@ -1547,14 +1579,17 @@ std::string DlangBindGenerator::getAccessStr(clang::AccessSpecifier ac, bool isS
 }
 
 
-void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
+void DlangBindGenerator::handleMethods(const clang::CXXRecordDecl *decl)
 {
+    static auto isIdentityAssignmentOperator = [](const CXXMethodDecl* m) { 
+        return m->getOverloadedOperator() == OverloadedOperatorKind::OO_Equal
+                && m->getNumParams() > 0
+                && m->getReturnType()->isReferenceType()
+                && m->parameters()[0]->getType()->getAsRecordDecl() == m->getReturnType()->getAsRecordDecl();
+    };
+
     clang::ASTContext *ast = &decl->getASTContext();
-    std::unique_ptr<MangleContext> mangleCtx;
-    if (ast->getTargetInfo().getTargetOpts().Triple.find("windows") != std::string::npos)
-        mangleCtx.reset(clang::MicrosoftMangleContext::create(*ast, ast->getDiagnostics()));
-    else
-        mangleCtx.reset(clang::ItaniumMangleContext::create(*ast, ast->getDiagnostics()));
+    std::unique_ptr<MangleContext> mangleCtx = makeManglingContext(ast);
 
     bool isVirtualDecl = hasVirtualMethods(decl);
 
@@ -1563,14 +1598,12 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
         // Try to parse delayed templates to get body AST available
         if (m->isLateTemplateParsed())
         {
-            auto& LPT = *sema->LateParsedTemplateMap.find(m)->second;
-            sema->LateTemplateParser(sema->OpaqueParser, LPT);
+            parseLateTemplate(m, sema);
         }
 
         std::string mangledName;
         std::string funcName;
-        bool noRetType = false;
-        bool isClass = decl->isClass();
+        bool hasRetType = true;
         bool hasConstPtrToNonConst = false;
         bool isStatic = m->isStatic();
         bool moveCtor = false;
@@ -1579,7 +1612,6 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
         bool isDefaultCtor = false;
         bool isDtor = false;
         bool isConversionOp = false;
-        bool idAssign = false;
         bool disable = false;
         bool customMangle = false;
 
@@ -1605,7 +1637,7 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
             if (const auto ct = llvm::dyn_cast<CXXConstructorDecl>(m))
             {
                 funcName = "this";
-                noRetType = true;
+                hasRetType = false;
                 isCtor = true;
                 isDefaultCtor = ct->isDefaultConstructor();
                 moveCtor = ct->isMoveConstructor();
@@ -1614,19 +1646,12 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
             else if (auto dt = llvm::dyn_cast<CXXDestructorDecl>(m))
             {
                 funcName = "~this";
-                noRetType = true;
+                hasRetType = false;
                 isDtor = true;
             }
             if (!(decl->isTemplated() || m->isTemplated()))
             {
-                llvm::raw_string_ostream ostream(mangledName);
-                if (isCtor)
-                    mangleCtx->mangleCXXCtor(cast<CXXConstructorDecl>(m), CXXCtorType::Ctor_Complete, ostream);
-                else if (isDtor)
-                    mangleCtx->mangleCXXDtor(cast<CXXDestructorDecl>(m), CXXDtorType::Dtor_Complete, ostream);
-                else
-                    mangleCtx->mangleName(m, ostream);
-                ostream.flush();
+                mangledName = getMangledName(m, mangleCtx.get());
             }
         }
 
@@ -1644,13 +1669,7 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
 
         if (isOperator)
         {
-            if (m->getOverloadedOperator() == OverloadedOperatorKind::OO_Equal)
-            if (m->getNumParams() == 1 
-                && m->getReturnType()->isReferenceType()
-                && m->parameters()[0]->getType()->getAsRecordDecl() == m->getReturnType()->getAsRecordDecl()
-            ){
-                idAssign = true;
-            }
+            
 
             // Get and recombine name with template args (if any)
             auto [name, templatedOp, customMangle_] = getOperatorName(m);
@@ -1663,7 +1682,7 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
 
         bool possibleOverride = !m->isPure() && (!(isCtor || isDtor) && overridesBaseOf(m, decl));
         bool cantOverride = possibleOverride && !(m->hasAttr<OverrideAttr>() || m->isVirtual());
-        bool commentOut = (!isVirtualDecl && isDefaultCtor) || idAssign || (isVirtualDecl && cantOverride);
+        bool commentOut = (!isVirtualDecl && isDefaultCtor) || isIdentityAssignmentOperator(m) || (isVirtualDecl && cantOverride);
         // default ctor for struct not allowed
         
         
@@ -1703,13 +1722,13 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
             }
         }
 
-        if (m->isDefaulted())
-            out << "// (default) ";
-
         if (commentOut)
         {
             out << "// ";
         }
+
+        if (m->isDefaulted())
+            out << "// (default) ";
 
         if (moveCtor)
             out << "// move ctor" << std::endl;
@@ -1721,13 +1740,12 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
             out << "/* inline */ ";
         }
 
-        out << getAccessStr(m->getAccess(), !isClass) << " ";
+        out << getAccessStr(m->getAccess(), !decl->isClass()) << " ";
 
-        if (!cantOverride)
-        if (isVirtualDecl && possibleOverride)
+        if (!cantOverride && isVirtualDecl && possibleOverride)
             out << "override ";
 
-        if (isStatic)
+        if (m->isStatic())
             out << "static ";
 
         if (isVirtualDecl && m->isPure())
@@ -1741,7 +1759,7 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
             out << "@disable ";
         }
 
-        if (!noRetType) // ctor or dtor for example doesn't have it
+        if (hasRetType)
             out << toDStyle(m->getReturnType()) << " ";
 
         if (isOperator || m->getIdentifier() == nullptr)
@@ -1774,12 +1792,11 @@ void DlangBindGenerator::methodIterate(const clang::CXXRecordDecl *decl)
                 printPrettyD(expr, os, ptrRet ? &rp : nullptr, *DlangBindGenerator::g_printPolicy, 0, ast);
                 ss << os.str();
                 std::string line;
-                for (int i = 0; std::getline(ss, line); i++)
+                while (std::getline(ss, line))
                 {
                     if (commentOut) 
                         out << "//";
-                    textReplaceArrowColon(line);
-                    out << line;
+                    out << textReplaceArrowColon(line);
                     if (!ss.eof()) 
                         out << std::endl;
                 }
