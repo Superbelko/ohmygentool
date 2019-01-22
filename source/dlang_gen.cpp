@@ -407,12 +407,12 @@ std::string getMangledName(const Decl* decl, MangleContext* ctx)
 {
     std::string mangledName;
     llvm::raw_string_ostream ostream(mangledName);
-    if (isa<FunctionDecl>(decl))
-        ctx->mangleName(cast<FunctionDecl>(decl), ostream);
-    else if (isa<CXXConstructorDecl>(decl))
+    if (isa<CXXConstructorDecl>(decl))
         ctx->mangleCXXCtor(cast<CXXConstructorDecl>(decl), CXXCtorType::Ctor_Complete, ostream);
     else if (isa<CXXDestructorDecl>(decl))
         ctx->mangleCXXDtor(cast<CXXDestructorDecl>(decl), CXXDtorType::Dtor_Complete, ostream);
+    else if (isa<FunctionDecl>(decl))
+        ctx->mangleName(cast<FunctionDecl>(decl), ostream);
     return ostream.str();
 }
 
@@ -1782,7 +1782,7 @@ void DlangBindGenerator::handleMethods(const clang::CXXRecordDecl *decl)
             out << "/* MANGLING OVERRIDE NOT YET FINISHED, ADJUST MANUALLY! */ ";
         
         // write function body
-        if (!skipBodies && m->isInlined() && m->hasInlineBody())
+        if (!skipBodies && m->hasBody())
         {
             auto writeMultilineExpr = [this, commentOut, ast](auto expr, bool ptrRet = false) {
                 std::string s;
@@ -1802,13 +1802,22 @@ void DlangBindGenerator::handleMethods(const clang::CXXRecordDecl *decl)
                 }
             };
 
+            const FunctionDecl* fndef = nullptr;
+            if (!m->getBody())
+                m->getBody(fndef);
+            if (!fndef)
+                fndef = m;
+
+            if (fndef->isLateTemplateParsed())
+                parseLateTemplate(const_cast<FunctionDecl*>(fndef), sema);
+
             // for now just mix initializer list and ctor body in extra set of braces
             bool hasInitializerList = false;
             bool isEmptyBody = true;
             bool isTemplated = decl->isTemplated() || m->isTemplated();
-            if (m->getBody())
-            if (auto body = dyn_cast<CompoundStmt>(m->getBody())) // can it actually be anything else?
-                isEmptyBody = body->body_empty();
+            if (fndef->getBody())
+                if (auto body = dyn_cast<CompoundStmt>(fndef->getBody())) // can it actually be anything else?
+                    isEmptyBody = body->body_empty();
 
             if (isCtor)
             {
@@ -1876,7 +1885,7 @@ void DlangBindGenerator::handleMethods(const clang::CXXRecordDecl *decl)
             if (!isEmptyBody)
             {
                 // write body after initializer list
-                writeMultilineExpr(m->getBody(), m->getReturnType()->isPointerType());
+                writeMultilineExpr(fndef->getBody(), m->getReturnType()->isPointerType());
                 out << std::endl;
             }
 
@@ -1890,7 +1899,7 @@ void DlangBindGenerator::handleMethods(const clang::CXXRecordDecl *decl)
             else if (isEmptyBody)
                 out << " {} " << std::endl;
 
-            if (!(m->getBody() || hasInitializerList))
+            if (!(fndef->getBody() || hasInitializerList))
             {
                 out << ";";
             }
