@@ -899,7 +899,11 @@ void DlangBindGenerator::onFunction(const clang::FunctionDecl *decl)
     out << ")";
     if (nogc)
         out << " @nogc";
-    out << ";" << std::endl;
+
+    if (!skipBodies && fn->hasBody())
+        writeFnBody(const_cast<FunctionDecl*>(fn));
+    else
+        out << ";" << std::endl;
 
     if (hasNamespace)
         nsPolicy->finishEntry(decl);
@@ -1781,133 +1785,10 @@ void DlangBindGenerator::handleMethods(const clang::CXXRecordDecl *decl)
         if (hasConstPtrToNonConst)
             out << "/* MANGLING OVERRIDE NOT YET FINISHED, ADJUST MANUALLY! */ ";
         
-        // write function body
         if (!skipBodies && m->hasBody())
-        {
-            auto writeMultilineExpr = [this, commentOut, ast](auto expr, bool ptrRet = false) {
-                std::string s;
-                llvm::raw_string_ostream os(s);
-                std::stringstream ss;
-                DPrinterHelper_PointerReturn rp;
-                printPrettyD(expr, os, ptrRet ? &rp : nullptr, *DlangBindGenerator::g_printPolicy, 0, ast);
-                ss << os.str();
-                std::string line;
-                while (std::getline(ss, line))
-                {
-                    if (commentOut) 
-                        out << "//";
-                    out << textReplaceArrowColon(line);
-                    if (!ss.eof()) 
-                        out << std::endl;
-                }
-            };
-
-            const FunctionDecl* fndef = nullptr;
-            if (!m->getBody())
-                m->getBody(fndef);
-            if (!fndef)
-                fndef = m;
-
-            if (fndef->isLateTemplateParsed())
-                parseLateTemplate(const_cast<FunctionDecl*>(fndef), sema);
-
-            // for now just mix initializer list and ctor body in extra set of braces
-            bool hasInitializerList = false;
-            bool isEmptyBody = true;
-            bool isTemplated = decl->isTemplated() || m->isTemplated();
-            if (fndef->getBody())
-                if (auto body = dyn_cast<CompoundStmt>(fndef->getBody())) // can it actually be anything else?
-                    isEmptyBody = body->body_empty();
-
-            if (isCtor)
-            {
-                const auto ctdecl = cast<CXXConstructorDecl>(m);
-                hasInitializerList = ctdecl->getNumCtorInitializers() != 0
-                    && std::find_if( ctdecl->init_begin(), ctdecl->init_end(), 
-                        //[](auto x) {return x->isInClassMemberInitializer();}
-                        [](auto x) {return x->isWritten();}
-                        ) != ctdecl->init_end();
-
-                if (hasInitializerList)
-                    out << "{" << std::endl << "// initializer list" << std::endl;
-
-                for(const auto init : ctdecl->inits())
-                {
-                    if (!init->isWritten())
-                        continue;
-                    // This will be handled at some point later by memberIterate() 
-                    if (init->isInClassMemberInitializer())
-                        continue;
-                    if (auto member = init->getMember())
-                    {
-                        writeMultilineExpr(init);
-                    }
-                    if (init->isBaseInitializer() && hasInitializerList)
-                    {
-                        bool tempComm = commentOut;
-                        auto scope = llvm::make_scope_exit ( [&]{commentOut = tempComm;} );
-                        // check if aliased base class have constructor available
-                        if (auto basector = dyn_cast<CXXConstructExpr>(init->getInit()))
-                        {
-                            if (!isVirtualDecl)
-                            {
-                                auto baserec = basector->getType()->getAsCXXRecordDecl();
-                                if ( decl->getNumBases() 
-                                    && decl->bases_begin()->getType()->getAsCXXRecordDecl() == baserec)
-                                {
-                                    if (basector->getNumArgs() > 0)
-                                    {
-                                        if (commentOut)
-                                            out << "//";
-                                        out << "_b0.__ctor(";
-                                        writeMultilineExpr(init->getInit());
-                                        out << ");" << std::endl;
-                                        continue;
-                                    }
-                                    else
-                                         commentOut = true;
-                                }
-                            }
-                        }
-
-                        if (commentOut)
-                            out << "//";
-                        out << "super(";
-                        writeMultilineExpr(init->getInit());
-                        out << ");" << std::endl;
-                    }
-                }
-
-                if (hasInitializerList && !isEmptyBody)
-                    out << "// ctor body" << std::endl;
-            }
-
-            if (!isEmptyBody)
-            {
-                // write body after initializer list
-                writeMultilineExpr(fndef->getBody(), m->getReturnType()->isPointerType());
-                out << std::endl;
-            }
-
-            // close extra braces
-            if (hasInitializerList && isCtor)
-            {
-                if (commentOut)
-                    out << "//";
-                out << "}";
-            }
-            else if (isEmptyBody)
-                out << " {} " << std::endl;
-
-            if (!(fndef->getBody() || hasInitializerList))
-            {
-                out << ";";
-            }
-        }
+            writeFnBody(m, commentOut);
         else
-        {
             out << ";" << std::endl;
-        }
     
         out << std::endl;
     }
@@ -2047,6 +1928,140 @@ void DlangBindGenerator::writeTemplateArgs(const clang::TemplateParameterList* t
             out << ", ";
     }
 }
+
+
+void DlangBindGenerator::writeFnBody(clang::FunctionDecl* fn, bool commentOut)
+{
+    auto ast = &fn->getASTContext();
+    RecordDecl* decl = nullptr;
+    if (fn->getDeclContext()->isRecord())
+        decl = cast<RecordDecl>(fn->getDeclContext());
+
+    auto asCXXDecl = [&decl] () { return cast<CXXRecordDecl>(decl); };
+
+    auto writeMultilineExpr = [this, commentOut, ast](auto expr, bool ptrRet = false) {
+        std::string s;
+        llvm::raw_string_ostream os(s);
+        std::stringstream ss;
+        DPrinterHelper_PointerReturn rp;
+        printPrettyD(expr, os, ptrRet ? &rp : nullptr, *DlangBindGenerator::g_printPolicy, 0, ast);
+        ss << os.str();
+        std::string line;
+        while (std::getline(ss, line))
+        {
+            if (commentOut) 
+                out << "//";
+            out << textReplaceArrowColon(line);
+            if (!ss.eof()) 
+                out << std::endl;
+        }
+    };
+
+    const FunctionDecl* fndef = nullptr;
+    if (!fn->getBody())
+        fn->getBody(fndef);
+    if (!fndef)
+        fndef = fn;
+
+    if (fndef->isLateTemplateParsed())
+        parseLateTemplate(const_cast<FunctionDecl*>(fndef), sema);
+
+    // for now just mix initializer list and ctor body in extra set of braces
+    bool hasInitializerList = false;
+    bool isEmptyBody = true;
+    bool isTemplated = fn->isTemplated();
+    if (decl)
+        isTemplated = isTemplated || decl->isTemplated();
+    if (fndef->getBody())
+        if (auto body = dyn_cast<CompoundStmt>(fndef->getBody())) // can it actually be anything else?
+            isEmptyBody = body->body_empty();
+
+    if (isa<CXXConstructorDecl>(fn))
+    {
+        const auto ctdecl = cast<CXXConstructorDecl>(fn);
+        hasInitializerList = ctdecl->getNumCtorInitializers() != 0
+            && std::find_if( ctdecl->init_begin(), ctdecl->init_end(), 
+                //[](auto x) {return x->isInClassMemberInitializer();}
+                [](auto x) {return x->isWritten();}
+                ) != ctdecl->init_end();
+
+        if (hasInitializerList)
+            out << "{" << std::endl << "// initializer list" << std::endl;
+
+        for(const auto init : ctdecl->inits())
+        {
+            if (!init->isWritten())
+                continue;
+            // This will be handled at some point later by memberIterate() 
+            if (init->isInClassMemberInitializer())
+                continue;
+            if (auto member = init->getMember())
+            {
+                writeMultilineExpr(init);
+            }
+            if (init->isBaseInitializer() && hasInitializerList)
+            {
+                bool tempComm = commentOut;
+                auto scope = llvm::make_scope_exit ( [&]{commentOut = tempComm;} );
+                // check if aliased base class have constructor available
+                if (auto basector = dyn_cast<CXXConstructExpr>(init->getInit()))
+                {
+                    if (!hasVirtualMethods(decl))
+                    {
+                        auto baserec = basector->getType()->getAsCXXRecordDecl();
+                        if ( auto cxxdecl = asCXXDecl(); cxxdecl && cxxdecl->getNumBases() 
+                            && cxxdecl->bases_begin()->getType()->getAsCXXRecordDecl() == baserec)
+                        {
+                            if (basector->getNumArgs() > 0)
+                            {
+                                if (commentOut)
+                                    out << "//";
+                                out << "_b0.__ctor(";
+                                writeMultilineExpr(init->getInit());
+                                out << ");" << std::endl;
+                                continue;
+                            }
+                            else
+                                 commentOut = true;
+                        }
+                    }
+                }
+
+                if (commentOut)
+                    out << "//";
+                out << "super(";
+                writeMultilineExpr(init->getInit());
+                out << ");" << std::endl;
+            }
+        }
+
+        if (hasInitializerList && !isEmptyBody)
+            out << "// ctor body" << std::endl;
+    }
+
+    if (!isEmptyBody)
+    {
+        // write body after initializer list
+        writeMultilineExpr(fndef->getBody(), fn->getReturnType()->isPointerType());
+        out << std::endl;
+    }
+
+    // close extra braces
+    if (hasInitializerList && isa<CXXConstructorDecl>(fn))
+    {
+        if (commentOut)
+            out << "//";
+        out << "}";
+    }
+    else if (isEmptyBody)
+        out << " {} " << std::endl;
+
+    if (!(fndef->getBody() || hasInitializerList))
+    {
+        out << ";";
+    }
+}
+
 
 std::tuple<std::string, std::string> DlangBindGenerator::getFSPathPart(const std::string_view loc)
 {

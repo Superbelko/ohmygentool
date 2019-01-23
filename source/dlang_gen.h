@@ -174,6 +174,8 @@ private:
     void writeTemplateArgs(const clang::TemplateArgumentList* ta);
     void writeTemplateArgs(const clang::TemplateParameterList* tp);
 
+    void writeFnBody(clang::FunctionDecl* fn, bool commentOut = false);
+
     // Get overloaded operator name & template args, such as { 'opBinary', 'string op:"+"'}
     static std::tuple<std::string, std::string, bool> getOperatorName(const clang::FunctionDecl* decl);
     
