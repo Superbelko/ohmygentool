@@ -417,6 +417,66 @@ std::string getMangledName(const Decl* decl, MangleContext* ctx)
 }
 
 
+std::string macroToString(const clang::MacroInfo* macro)
+{
+    std::string s;
+    llvm::raw_string_ostream os(s);
+
+    for (auto tok : macro->tokens())
+    {
+        if (tok.isAnyIdentifier())
+        {
+            os << tok.getIdentifierInfo()->getName();
+        }
+        else if (tok.isLiteral())
+        {
+            os << std::string(tok.getLiteralData(), tok.getLength());
+        }
+        else if (auto kw = clang::tok::getKeywordSpelling(tok.getKind()))
+        {
+            os << kw;
+        }
+        else if (auto pu = clang::tok::getPunctuatorSpelling(tok.getKind()))
+        { 
+            static const std::vector<clang::tok::TokenKind> wstokens = { // tokens that needs ws after it
+                clang::tok::comma, clang::tok::r_paren, clang::tok::r_brace, clang::tok::semi
+            };
+            os << pu;
+            //bool ws = std::find(wstokens.begin(), wstokens.end(), tok.getKind()) != wstokens.end();
+            //if (ws) os << " ";
+        }
+    }
+
+    return os.str();
+}
+
+// Indicates that macro is likely be a literal value or expression, and does not contains keywords
+bool isPrimitiveMacro(const clang::MacroInfo* macro)
+{
+    static const std::vector<clang::tok::TokenKind> otherAllowedTokens = {
+        tok::period, tok::comma, tok::arrow, tok::l_paren, tok::r_paren, tok::l_square, tok::r_square, tok::coloncolon
+    };
+    static const std::vector<clang::tok::TokenKind> opTokens = {
+        tok::plus, tok::minus, tok::star, tok::slash,
+        tok::percent, tok::tilde, tok::caret, tok::amp, tok::pipe,
+        tok::ampamp, tok::pipepipe, tok::exclaim,
+        tok::lessless, tok::greatergreater, tok::greatergreatergreater
+    };
+    static auto isLiteralOrOperator = [](const Token tok) -> bool {
+        return !tok.isAnyIdentifier() 
+            && nullptr == clang::tok::getKeywordSpelling(tok.getKind())
+            && (tok.isLiteral() 
+                || (std::find(opTokens.begin(), opTokens.end(), tok.getKind()) != opTokens.end())
+                || (std::find(otherAllowedTokens.begin(), otherAllowedTokens.end(), tok.getKind()) != otherAllowedTokens.end())
+            )
+        ;
+    };
+    auto b = macro->tokens_begin();
+    auto e = macro->tokens_end();
+    return std::all_of(b, e, [](Token tok) { return isLiteralOrOperator(tok); });
+}
+
+
 bool DlangBindGenerator::isRelevantPath(const std::string_view path)
 {
     if (path.size() == 0 || path.compare("<invalid loc>") == 0) 
@@ -486,7 +546,33 @@ void DlangBindGenerator::finalize()
 
 void DlangBindGenerator::onMacroDefine(const clang::Token* name, const clang::MacroDirective* macro)
 {
-    static const int LARGE_MACRO_NUM_TOKENS = 50;
+    static const int LONG_MACRO_NUM_TOKENS = 120;
+    auto formatMacroOpen = [] (const clang::MacroInfo* mi, const llvm::StringRef macroName) {
+        std::string s;
+        llvm::raw_string_ostream os(s);
+        os << "enum " << macroName;
+        if (mi->getNumParams())
+            os << "(";
+        for (auto p : mi->params())
+        {
+            os << p->getName().str();
+            if (p != *(mi->param_end()-1)) os << ", ";
+        }
+        if (mi->getNumParams())
+            os << ")";
+        os << " = ";
+        if (mi->getNumParams() || !isPrimitiveMacro(mi))
+            os << "`";
+        return os.str();
+    };
+    auto formatMacroClose = [] (const clang::MacroInfo* mi) {
+        std::string s;
+        llvm::raw_string_ostream os(s);
+        if (mi->getNumParams() || !isPrimitiveMacro(mi))
+            os << "`";
+        os << ";";
+        return os.str();
+    };
 
     if (!macro)
         return;
@@ -497,10 +583,6 @@ void DlangBindGenerator::onMacroDefine(const clang::Token* name, const clang::Ma
 
     if (auto mi = macro->getMacroInfo())
     {
-        static auto isSignTok = [](tok::TokenKind k) { 
-            return k == clang::tok::minus || k == clang::tok::plus; 
-        };
-
         if (mi->isUsedForHeaderGuard() || mi->getNumTokens() == 0)
             return;
         
@@ -510,65 +592,20 @@ void DlangBindGenerator::onMacroDefine(const clang::Token* name, const clang::Ma
         auto id = name->getIdentifierInfo()->getName();
         if ( macroDefs.find(id.str()) != macroDefs.end() )
             return;
-        else macroDefs.insert(std::make_pair(id.str(), true));
+        else 
+            macroDefs.insert(std::make_pair(id.str(), true));
 
-        // indicates that macro probably a simple value staring with minus or plus
-        bool tokWithSign = mi->getNumTokens() == 2 && isSignTok(mi->getReplacementToken(0).getKind());
-        bool prevHash = false; // is the last token was a '#'
-        // this measure disallows macros that possibly expands into hundreds of lines
-        // it is not accurate in any way, but there is no better way to detect such cases
-        if (mi->getNumTokens() == 1 || tokWithSign)
+        if (mi->getNumTokens() < LONG_MACRO_NUM_TOKENS)
         {
-            // Write commented out macro body if it is function-like
-            if (mi->getNumParams())
-                out << "/*" << std::endl;
-            out << "enum " << name->getIdentifierInfo()->getName().str();
-            if (mi->getNumParams())
-                out << "(";
-            for (auto p : mi->params())
-            {
-                out << p->getName().str();
-                if (p != *(mi->param_end()-1)) out << ", ";
-            }
-            if (mi->getNumParams())
-                out << ")" << std::endl;
-            out << " = ";
-
-            for (auto tok : mi->tokens())
-            {
-                if (tok.isAnyIdentifier())
-                {
-                    out << tok.getIdentifierInfo()->getName().str() << " "; 
-                }
-                else if (tok.isLiteral())
-                {
-                    out << std::string_view(tok.getLiteralData(), tok.getLength()) << " "; 
-                }
-                else if (auto kw = clang::tok::getKeywordSpelling(tok.getKind()))
-                {
-                    out << kw << " ";
-                }
-                else if (auto pu = clang::tok::getPunctuatorSpelling(tok.getKind()))
-                { 
-                    static const std::vector<clang::tok::TokenKind> wstokens = { // tokens that needs ws after it
-                        clang::tok::comma, clang::tok::r_paren, clang::tok::r_brace, clang::tok::semi
-                    };
-                    bool ws = std::find(wstokens.begin(), wstokens.end(), tok.getKind()) != wstokens.end();
-                    out << pu;
-                    if (ws) out << " ";
-                }
-                prevHash = tok.getKind() == clang::tok::hash;
-            }
-            out << ";";
-            // Close commented out function-like macro
-            if (mi->getNumParams())
-                out << std::endl << "*/";
+            out << formatMacroOpen(mi, id);
+            out << macroToString(mi);
+            out << formatMacroClose(mi);
             out << std::endl;
         }
         else // 'long' macro
         {
             out << "//" << path << std::endl;
-            out << "//#define " << name->getIdentifierInfo()->getName().str()
+            out << "//#define " << id.str()
                 << " ..." << std::endl;
         }
     }
