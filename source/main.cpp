@@ -181,6 +181,18 @@ std::string getPathForDecl(const Decl* decl, SourceManager& srcMgr)
 }
 
 
+bool isTopLevelDecl(Decl* decl)
+{
+	auto declContext = decl->getDeclContext();
+	if (declContext->getDeclKind() == Decl::Kind::ExternCContext 
+	|| declContext->getDeclKind() == Decl::Kind::LinkageSpec)
+		declContext = declContext->getParent();
+	return declContext 
+		&& (declContext->getDeclKind() == Decl::Kind::TranslationUnit
+			|| declContext->getDeclKind() == Decl::Kind::Namespace);
+}
+
+
 // Do normal generator action on decl
 void handleDecl(Decl* decl, IAbstractGenerator* handler)
 {
@@ -190,11 +202,8 @@ void handleDecl(Decl* decl, IAbstractGenerator* handler)
 
 	if (isa<FunctionDecl>(decl))
 	{
-		if (decl->getDeclContext()->getDeclKind() == Decl::Kind::TranslationUnit
-			|| decl->getDeclContext()->getDeclKind() == Decl::Kind::Namespace)
-		{
+		if (isTopLevelDecl(decl))
 			handler->onFunction(cast<FunctionDecl>(decl));
-		}
 	}
 
 	else if (isa<RecordDecl>(decl))
@@ -237,6 +246,13 @@ void handleDecl(Decl* decl, IAbstractGenerator* handler)
 	{
 		auto ns = cast<NamespaceDecl>(decl);
 		for (auto& d : ns->decls())
+			handleDecl(d, handler);
+	}
+
+	else if (isa<LinkageSpecDecl>(decl))
+	{
+		auto ec = cast<LinkageSpecDecl>(decl);
+		for (auto d : ec->decls())
 			handleDecl(d, handler);
 	}
 }
