@@ -49,6 +49,7 @@ USE ON YOUR OWN RISK!
 ##### Tools
 * C++17 compliant compiler
 * CMake (3.10+ on Windows)
+* D compiler (DMD or LDC2) with DUB build system (usually shipped with compiler)
 ##### Libraries
 * LLVM (7.0 recommended)
 * Clang (7.0 recommended)
@@ -59,18 +60,23 @@ LLVM 7 / Clang 7 recommended, but Clang 6 might work as well.
 ##### Instructions
 *Please note that building LLVM alone will take about 45 minutes on my machine, and over 1.5 hours with Clang*
 * Build LLVM, preferably Debug configuration (might require configuring as static library target on non-Windows)
-    * Set-up LLVM_DIR environment variable with path to _(your_llvm_build)     /lib/cmake/llvm_
-* **OR** just try your OS package manager prebuilt binaries *(for example 'libclang-7-dev' package on Ubuntu)*, this saves you hours of time and over 40 GB
-disk space
+    * Set-up LLVM_DIR environment variable with _/path/to/your_llvm_build_
+* **OR** you can also try your OS package manager prebuilt binaries *(for example 'libclang-7-dev llvm-7-dev' packages on Ubuntu)*, this can save you hours of waiting and up to 40 GB of disk space
 * Copy RapidJSON *include* folder to gentool *include* folder
+* Set up CLANG_LIB_PATH environment variable to where .lib/.a LLVM & Clang libs can be found
 * Build!
 ```
-mkdir whatever-dir
-cd whatever-dir
+mkdir build
+cd build
 cmake ../ -DCMAKE_GENERATOR_PLATFORM=x64
 cmake --build . --config Debug
+cd ..
+dub build --arch=x86_64
 ```
 *-DCMAKE_GENERATOR_PLATFORM=x64 here is not required, just shows how to quickly generate x64 on Windows*
+
+**Linux note:**  
+    It may fail to link due to lib order, in this case try using lld linker
 
 After these steps you will have nice and compact 66 MB executable.
 
