@@ -11,6 +11,7 @@
 	"lflags-windows": ["/LIBPATH:build", "/LIBPATH:$CLANG_LIB_PATH", "/NODEFAULTLIB:MSVCRT", "/NODEFAULTLIB:ucrt", "/NODEFAULTLIB:libcmt" ],
 	"libs-posix": [ 
 		"stdc++", 
+		"stdc++fs",
 		"tinfo"
 	],
 	"libs-windows": [
