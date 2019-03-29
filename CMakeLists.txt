@@ -38,6 +38,7 @@ SET(SOURCE_LIST
     source/printprettyd.cpp 
     source/iohelpers.cpp
     source/compiler.cpp
+    source/options.cpp
 )
 
 if (GENTOOL_LIB)

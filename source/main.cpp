@@ -48,6 +48,7 @@
 
 #include "gentool/abstract_generator.h"
 #include "gentool/options.h"
+#include "gentool/defines.h"
 #include "ppcallbacks.h"
 #include "iohelpers.h"
 #include "dlang_gen.h"
@@ -649,6 +650,32 @@ private:
 
 static llvm::cl::OptionCategory MyToolCategory("My tool options");
 
+extern"C" API_EXPORT int gentool_run(int compilerArgc, const char** compilerArgv, CInputOptions inOpts, COutputOptions outOpts)
+{
+	gentool::InputOptions input(inOpts);
+	gentool::OutputOptions output(outOpts);
+
+	initGlobalLangOptions(input);
+
+	llvm::install_fatal_error_handler(llvmOnError);
+
+	CommonOptionsParser op(compilerArgc, compilerArgv, MyToolCategory); // feed in argc, argv, kind of
+	ClangTool tool(op.getCompilations(), op.getSourcePathList());
+
+
+	DlangBindGenerator generator;
+
+	generator.setOptions(&input, &output);
+	generator.prepare();
+
+	GentoolFrontendActionFactory Factory(&generator);
+	auto toolres = tool.run(&Factory);
+
+	generator.finalize();
+
+	return toolres;
+}
+
 #ifndef USE_LIB_TARGET
 
 
@@ -687,24 +714,7 @@ int main(int argc, const char **argv)
 	}
 	int cmdArgc = (int)cmdArgv.size();
 
-
-	llvm::install_fatal_error_handler(llvmOnError);
-
-	CommonOptionsParser op(cmdArgc, cmdArgv.data(), MyToolCategory); // feed in argc, argv, kind of
-	ClangTool tool(op.getCompilations(), op.getSourcePathList());
-
-
-	DlangBindGenerator generator;
-
-	generator.setOptions(&input, &output);
-	generator.prepare();
-
-	GentoolFrontendActionFactory Factory(&generator);
-	auto toolres = tool.run(&Factory);
-
-	generator.finalize();
-
-	return toolres;
+	return gentool_run(cmdArgc, cmdArgv.data(), input.toPlainC(), output.toPlainC());
 } // main()
 
 #endif // ifndef USE_LIB_TARGET
