@@ -44,6 +44,7 @@ SET(SOURCE_LIST
 if (GENTOOL_LIB)
     add_library(gentool ${SOURCE_LIST})
     target_compile_definitions(gentool PRIVATE USE_LIB_TARGET GENTOOL_EXPORT_SYMBOLS)
+    set_target_properties(gentool PROPERTIES POSITION_INDEPENDENT_CODE ON)
 else()
     add_executable(gentool ${SOURCE_LIST})
 endif()
