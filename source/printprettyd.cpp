@@ -1033,9 +1033,35 @@ public:
 
     bool VisitBinaryOperator(BinaryOperator *Node) 
     {
+        bool isPtr = false;
+        if (auto member = dyn_cast<MemberExpr>(Node->getLHS()))
+            isPtr = member->getType()->isPointerType();
+        else if (auto declref = dyn_cast<DeclRefExpr>(Node->getLHS()))
+            isPtr = declref->getType()->isPointerType();
+
+        // outputs LHS 'op' RHS
         TraverseStmt(Node->getLHS());
         OS << " " << BinaryOperator::getOpcodeStr(Node->getOpcode()) << " ";
-        TraverseStmt(Node->getRHS());
+
+        auto noImpCastsRHS = Node->getRHS()->IgnoreImpCasts();
+        if (isPtr && isa<IntegerLiteral>(noImpCastsRHS))
+        {
+            llvm::APSInt res;
+            if (noImpCastsRHS->EvaluateAsInt(res, *Context) && res.isNullValue())
+            {
+                OS << "null";
+            }
+            else
+            {
+                OS << "cast(" << DlangBindGenerator::toDStyle(Node->getLHS()->getType()) << ") ";
+                TraverseStmt(Node->getRHS());
+            }
+        }
+        else
+        {
+            TraverseStmt(Node->getRHS());
+        }
+
         return false;
     }
 
