@@ -1155,7 +1155,18 @@ public:
     }
 
     bool VisitStringLiteral(StringLiteral *Str) {
-        Str->outputString(OS);
+        // wide strings have 'L' prefix, strip it
+        if (Str->isWide())
+        {
+            std::string buf;
+            llvm::raw_string_ostream temp(buf);
+            Str->outputString(temp);
+            temp.flush();
+            OS << buf.substr(buf[0] == 'L' ? 1 : 0);
+        }
+        else
+            Str->outputString(OS);
+
         return true;
     }
 
