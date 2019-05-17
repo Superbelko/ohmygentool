@@ -712,8 +712,16 @@ public:
                 break;
             }
 
-            if (i) OS << ", ";
+            if (i) { OS << ", "; }
             TraverseStmt(Call->getArg(i));
+
+            // add .byRef hack for temporary objects
+            if (auto fn = Call->getDirectCallee())
+            {
+                auto fp = fn->getParamDecl(i);
+                if (fp->getType()->isReferenceType() && isa<MaterializeTemporaryExpr>(Call->getArg(i)))
+                    OS << ".byRef";
+            }
         }
     }
 
