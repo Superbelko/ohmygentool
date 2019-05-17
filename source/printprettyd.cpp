@@ -802,7 +802,7 @@ public:
             OS << " ";
             HasCXXThisVisitor finder;
             finder.TraverseStmt(Node->getArgumentExpr());
-            if (!finder.thisFound)
+            if (!finder.thisFound || finder.thisFound->isImplicitCXXThis())
                 TraverseStmt(Node->getArgumentExpr());
             else
             {
