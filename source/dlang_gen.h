@@ -156,6 +156,8 @@ public:
     static std::string toDStyle(clang::QualType type);
     static std::string sanitizedIdentifier(const std::string& id);
     static std::string getAccessStr(clang::AccessSpecifier ac, bool isStruct = false);
+    // Get overloaded operator name & template args, such as { 'opBinary', 'string op:"+"'}
+    static std::tuple<std::string, std::string, bool> getOperatorName(const clang::FunctionDecl* decl);
 private:
     // returns "C" or "C++" depending on settings
     std::string externAsString(bool isExternC = false) const;
@@ -176,8 +178,6 @@ private:
 
     void writeFnBody(clang::FunctionDecl* fn, bool commentOut = false);
 
-    // Get overloaded operator name & template args, such as { 'opBinary', 'string op:"+"'}
-    static std::tuple<std::string, std::string, bool> getOperatorName(const clang::FunctionDecl* decl);
     
     // Try to insert entry into dict, return true on success.
     template <typename T, typename S>

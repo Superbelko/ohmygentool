@@ -626,8 +626,20 @@ public:
         }
         //if (Node->hasTemplateKeyword())
         //    OS << "template ";
-        OS <<  DlangBindGenerator::sanitizedIdentifier(
+
+        // Write hand written operator calls
+        if (auto methodDecl = dyn_cast<CXXMethodDecl>(Node->getMemberDecl()); methodDecl && methodDecl->isOverloadedOperator())
+        {
+            auto [name, opSign, _] = DlangBindGenerator::getOperatorName(methodDecl);
+            OS << name;
+            if (!opSign.empty()) 
+                OS << "!(" << opSign << ")";
+        }
+        else
+        {
+            OS <<  DlangBindGenerator::sanitizedIdentifier(
                 Node->getMemberNameInfo().getName().getAsString());
+        }
         // TODO: template args
         if (Node->hasExplicitTemplateArgs())
             printDTemplateArgumentList(OS, Node->template_arguments(), Policy);
