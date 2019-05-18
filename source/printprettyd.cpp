@@ -476,7 +476,15 @@ public:
     }
 
     bool VisitArraySubscriptExpr(ArraySubscriptExpr *Node) {
-        TraverseStmt(Node->getLHS());
+        auto arrExpr = Node->getLHS();
+
+        // selectively avoid adding .ptr to array index access
+        // prevents issues like 'arr.ptr[0] = 0' where it should be 'arr[0] = 0'
+        auto impcast = dyn_cast<ImplicitCastExpr>(Node->getLHS());
+        if (impcast && impcast->getCastKind() == CastKind::CK_ArrayToPointerDecay)
+            arrExpr = arrExpr->IgnoreImpCasts();
+        
+        TraverseStmt(arrExpr);
         OS << "[";
         TraverseStmt(Node->getRHS());
         OS << "]";
@@ -568,6 +576,19 @@ public:
                 OS << "null";
                 return false;
             }
+        }
+        // add .ptr suffix for all array casts except string literals
+        if (Node->getCastKind() == CastKind::CK_ArrayToPointerDecay)
+        {
+            TraverseStmt(Node->getSubExpr());
+            if (!isa<StringLiteral>(Node->IgnoreImpCasts()))
+                OS << ".ptr";
+            return false;
+        }
+        if (Node->getCastKind() == CastKind::CK_NullToPointer)
+        {
+            OS << "null";
+            return false;
         }
         return true;
     }
