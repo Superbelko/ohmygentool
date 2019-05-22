@@ -243,8 +243,15 @@ public:
 
     bool VisitCStyleCastExpr(CStyleCastExpr *E)
     {
-        //OS << "cast(" << E->getTypeAsWritten().getAsString() << ")";
-        OS << "cast(" << DlangBindGenerator::toDStyle(E->getTypeAsWritten()) << ")";
+        if (E->getCastKind() == CastKind::CK_ToVoid && HandlePotentialAssert(E))
+        {
+            return false;
+        }
+        else
+        {
+            //OS << "cast(" << E->getTypeAsWritten().getAsString() << ")";
+            OS << "cast(" << DlangBindGenerator::toDStyle(E->getTypeAsWritten()) << ")";
+        }
         return true;
     }
 
@@ -1283,6 +1290,40 @@ public:
             break;
         }
         return true;
+    }
+
+    bool HandlePotentialAssert(CStyleCastExpr* E)
+    {
+        // Detect if this cast expands to parens containing logical op with right hand being comma expr containing assert function
+        // (void)((!!(expr)) || _wassert(msg, file, line), 0)
+        if (auto outerParens = dyn_cast<ParenExpr>(E->getSubExpr()))
+        {
+            if (auto logicOp = dyn_cast<BinaryOperator>(outerParens->getSubExpr()))
+            {
+                auto commaExpr = dyn_cast<BinaryOperator>(logicOp->getRHS()->IgnoreImpCasts()->IgnoreParens());
+                if (commaExpr && commaExpr->getOpcode() == BinaryOperatorKind::BO_Comma)
+                {
+                    if (auto callExpr = dyn_cast<CallExpr>(commaExpr->getLHS()))
+                    {
+                        auto fnref = callExpr->getDirectCallee();
+                        if (fnref && fnref->getNameInfo().getAsString().find("assert") != std::string::npos)
+                        {
+                            // convert to normal assert
+                            if (callExpr->getNumArgs() == 3 
+                                && (logicOp->isLogicalOp() || logicOp->isKnownToHaveBooleanValue()))
+                            {
+                                OS << "assert(";
+                                TraverseStmt(logicOp->getLHS()->IgnoreParens());
+                                OS << ", "; TraverseStmt(callExpr->getArg(0));
+                                OS << ")";
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return false;
     }
 };
 } // namespace
