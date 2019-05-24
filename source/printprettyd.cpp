@@ -478,6 +478,7 @@ public:
         {
             OS << "\n";
             TraverseStmt(Node->getBody());
+            OS << ";";
         }
         return false;
     }
