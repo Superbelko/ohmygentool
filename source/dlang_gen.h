@@ -7,11 +7,14 @@
 #include <iostream>
 #include <ostream>
 #include <fstream>
+#include <sstream>
 #include <string>
 #include <algorithm>
 #include <unordered_map>
 #include <string_view>
 #include <memory>
+#include <unordered_set>
+#include <tuple>
 
 #if __has_include(<filesystem>)
 #include <filesystem>
@@ -54,14 +57,20 @@
 
 #pragma warning(pop)
 
+
+// Gathers 'actions' to take after translation
+class FeedbackContext;
+
 // Similar to default printPretty for expressions, except prints D from C++ AST
 void printPrettyD(const clang::Stmt *stmt, llvm::raw_ostream &OS, clang::PrinterHelper *Helper,
                      const clang::PrintingPolicy &Policy, unsigned Indentation = 0,
-                     const clang::ASTContext *Context = nullptr);
+                     const clang::ASTContext *Context = nullptr,
+                     FeedbackContext* feedback = nullptr);
 // Same as above but for ctor initializers
 void printPrettyD(const clang::CXXCtorInitializer *init, llvm::raw_ostream &OS, clang::PrinterHelper *Helper,
                      const clang::PrintingPolicy &Policy, unsigned Indentation = 0,
-                     const clang::ASTContext *Context = nullptr);
+                     const clang::ASTContext *Context = nullptr,
+                     FeedbackContext* feedback = nullptr);
 
 bool hasVirtualMethods(const clang::RecordDecl* rd);
 
@@ -82,19 +91,33 @@ public:
 class NamespacePolicy;
 class NamespacePolicy_StringList;
 
+
+struct DeclLocation
+{
+    DeclLocation() = default;
+    DeclLocation(size_t line, size_t indent) : line(line), indent(indent) {}
+    DeclLocation(const std::tuple<size_t, size_t>& tup) : line(std::get<0>(tup)), indent(std::get<1>(tup)) { }
+    size_t line = 0;
+    size_t indent = 0;
+    bool operator< (const DeclLocation& rhs) const
+    {
+        return line < rhs.line;
+    }
+};
+
 struct DlangBindGenerator : public gentool::IAbstractGenerator
 {
     friend class NamespacePolicy;
     friend class NamespacePolicy_StringList;
 public:
     static thread_local clang::PrintingPolicy* g_printPolicy;
-protected:
+
     std::unique_ptr<NamespacePolicy> nsPolicy;
     clang::SourceManager* SourceMgr;
     clang::Sema* sema;
-	std::ofstream fileOut;
+	std::stringstream bufOut;
     std::ofstream mangleOut;
-	OutStreamHelper out = OutStreamHelper(nullptr/*&std::cout*/, &fileOut);
+	OutStreamHelper out = OutStreamHelper(nullptr/*&std::cout*/, &bufOut);
 	std::string classOrStructName;
 	std::string finalTypeName;
 	std::list<const clang::RecordDecl*> declStack; // for nesting structs or enums
@@ -108,6 +131,14 @@ protected:
     MacroDefs macroDefs;
     using ForwardTypes = std::unordered_map<std::string, bool>;
 	ForwardTypes forwardTypes;
+    using DeclLocations = std::map<std::string, DeclLocation>;
+    DeclLocations declLocations; // this one maps resulting location for original decls
+
+    gentool::InputOptions const* iops;
+    gentool::OutputOptions const* outops;
+
+protected:
+    FeedbackContext* feedback;
     int localAnonRecordId = 1; // specific to top records anonimous counter
     int globalAnonTypeId = 0; // used to deanonimize at global scope
 	int accumBitFieldWidth = 0; // accumulated width in bits, we need to round up to byte, short, int or long and split when necessary
@@ -121,8 +152,6 @@ protected:
     bool skipBodies = false;
     bool mangleAll = false;
     bool oldNamespaces = false;
-
-	gentool::InputOptions const* iops;
 
 public:
     virtual bool isRelevantPath(const std::string_view path) override;
@@ -221,4 +250,37 @@ public:
     virtual void beginEntry(const clang::Decl* decl, const std::string& extern_) = 0;
     // Called after record done writing
     virtual void finishEntry(const clang::Decl* decl) = 0;
+};
+
+
+class FeedbackAction
+{
+public:
+    virtual void apply(DlangBindGenerator* generator) {}
+    virtual ~FeedbackAction() {}
+};
+
+class AddRvalueHackAction : public FeedbackAction
+{
+public:
+    AddRvalueHackAction(std::string declName) : declName(declName) {}
+
+    virtual void apply(DlangBindGenerator* generator) override;
+
+    std::string declName;
+};
+
+class FeedbackContext
+{
+public:
+    std::vector<std::unique_ptr<FeedbackAction>> actions;
+    virtual ~FeedbackContext() {}
+    virtual void addAction(std::unique_ptr<FeedbackAction> action);
+};
+
+
+class NullFeedbackContext : public FeedbackContext
+{
+public:
+    virtual void addAction(std::unique_ptr<FeedbackAction> action) override {}
 };

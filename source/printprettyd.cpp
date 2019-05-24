@@ -128,13 +128,14 @@ class CppDASTPrinterVisitor : public RecursiveASTVisitor<CppDASTPrinterVisitor>
     const ASTContext *Context;
     bool reverse = false;
     bool isCtorInitializer = false;
-
+    FeedbackContext* Feedback;
 public:
     explicit CppDASTPrinterVisitor(raw_ostream &os, PrinterHelper *helper,
                 const PrintingPolicy &Policy, unsigned Indentation = 0,
-                const ASTContext *Context = nullptr)
+                const ASTContext *Context = nullptr,
+                FeedbackContext* Feedback = nullptr)
         : OS(os), IndentLevel(Indentation), Helper(helper), Policy(Policy),
-          Context(Context) {}
+          Context(Context), Feedback(Feedback) {}
 
     raw_ostream &Indent(int Delta = 0) {
       for (int i = 0, e = IndentLevel+Delta; i < e; ++i)
@@ -749,7 +750,12 @@ public:
             {
                 auto fp = fn->getParamDecl(i);
                 if (fp->getType()->isReferenceType() && isa<MaterializeTemporaryExpr>(Call->getArg(i)))
+                {
                     OS << ".byRef";
+                    Feedback->addAction(
+                        std::move(std::make_unique<AddRvalueHackAction>(Call->getArg(i)->getType()->getAsRecordDecl()->getName()))
+                        );
+                }
             }
         }
     }
@@ -1379,16 +1385,18 @@ void printDTemplateArgumentList(raw_ostream &OS, ArrayRef<TA> Args,
 
 void printPrettyD(const Stmt *stmt, raw_ostream &OS, PrinterHelper *Helper,
                      const PrintingPolicy &Policy, unsigned Indentation /*= 0*/,
-                     const ASTContext *Context /*= nullptr*/)
+                     const ASTContext *Context /*= nullptr*/,
+                     FeedbackContext* feedback)
 {
-    CppDASTPrinterVisitor P(OS, Helper, Policy, Indentation, Context);
+    CppDASTPrinterVisitor P(OS, Helper, Policy, Indentation, Context, feedback);
     P.TraverseStmt(const_cast<Stmt*>(stmt));
 }
 
 void printPrettyD(const CXXCtorInitializer *init, raw_ostream &OS, PrinterHelper *Helper,
                      const PrintingPolicy &Policy, unsigned Indentation /*= 0*/,
-                     const ASTContext *Context /*= nullptr*/)
+                     const ASTContext *Context /*= nullptr*/,
+                     FeedbackContext* feedback)
 {
-    CppDASTPrinterVisitor P(OS, Helper, Policy, Indentation, Context);
+    CppDASTPrinterVisitor P(OS, Helper, Policy, Indentation, Context, feedback);
     P.TraverseConstructorInitializer(const_cast<CXXCtorInitializer*>(init));
 }

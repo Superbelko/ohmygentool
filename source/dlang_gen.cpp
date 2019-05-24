@@ -503,9 +503,10 @@ void DlangBindGenerator::setOptions(const InputOptions *inOpt, const OutputOptio
     }
     if (outOpt)
     {
-        if (fileOut.is_open())
-            fileOut.close();
-        fileOut.open(outOpt->path);
+        outops = outOpt;
+        //if (fileOut.is_open())
+        //    fileOut.close();
+        //fileOut.open(outOpt->path);
         nsfileOpen(outOpt->path, mangleOut);
         if (std::find(outOpt->extras.begin(), outOpt->extras.end(), "attr-nogc") != outOpt->extras.end())
             nogc = true;
@@ -528,6 +529,7 @@ void DlangBindGenerator::setOptions(const InputOptions *inOpt, const OutputOptio
 
 void DlangBindGenerator::prepare()
 {
+    feedback = new FeedbackContext();
     mixinTemplateId = 1;
     out << MODULE_HEADER;
 
@@ -542,6 +544,40 @@ void DlangBindGenerator::finalize()
         if (f.second)
             out << "struct " << f.first << ";" << std::endl;
     }
+
+    // rewind the file to add requiring mixins
+    std::set<std::string> rvals;
+    std::vector<AddRvalueHackAction*> rvas;
+    for(std::unique_ptr<FeedbackAction>& p : feedback->actions)
+        if (auto a = static_cast<AddRvalueHackAction*>(p.get()))
+        {
+            if (rvals.find(a->declName) != rvals.end())
+                continue;
+            rvas.push_back(a);
+            rvals.insert(a->declName);
+        }
+
+    std::remove_if(rvas.begin(), rvas.end(),
+        [this](const AddRvalueHackAction* a) {
+            return declLocations.find(a->declName) == declLocations.end();
+        }
+    );
+    std::sort(rvas.begin(), rvas.end(),
+        [this](const AddRvalueHackAction* lhs, const AddRvalueHackAction* rhs) {
+            if (lhs->declName == rhs->declName)
+                return true;
+            auto lpos = declLocations.find(lhs->declName);
+            auto rpos = declLocations.find(rhs->declName);
+            return lpos->second.line > rpos->second.line; // descending order
+        }
+    );
+    for(auto a : rvas)
+        a->apply(this);
+
+    std::ofstream out;
+    out.open(outops->path);
+    out << bufOut.str();
+    out.flush();
 }
 
 void DlangBindGenerator::onMacroDefine(const clang::Token* name, const clang::MacroDirective* macro)
@@ -763,6 +799,8 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
     out << "{" << std::endl;
     {
         IndentBlock _classbody(out, 4);
+        if (decl->getIdentifier())
+            declLocations.insert(std::make_pair(decl->getNameAsString(), DeclLocation((size_t)bufOut.tellp(), (size_t)out._indent)));
 #if 0
         // Nope, this does not conform to actual layout, 
         // that means we have to apply align on every field instead
@@ -1022,7 +1060,7 @@ void DlangBindGenerator::onGlobalVar(const clang::VarDecl *decl)
     {
         std::string s;
         llvm::raw_string_ostream os(s);
-        printPrettyD(init, os, nullptr, *DlangBindGenerator::g_printPolicy);
+        printPrettyD(init, os, nullptr, *DlangBindGenerator::g_printPolicy, 0, &decl->getASTContext(), feedback);
         out << " = ";
         out << os.str();
     }
@@ -1507,7 +1545,7 @@ void DlangBindGenerator::handleFields(const clang::RecordDecl *decl)
             std::string s;
             llvm::raw_string_ostream os(s);
             //it->getBitWidth()->printPretty(os, nullptr, *DlangBindGenerator::g_printPolicy);
-            printPrettyD(it->getBitWidth(), os, nullptr, *DlangBindGenerator::g_printPolicy);
+            printPrettyD(it->getBitWidth(), os, nullptr, *DlangBindGenerator::g_printPolicy, 0, &decl->getASTContext(), feedback);
             bitwidthExpr = os.str();
             bitwidth = it->getBitWidthValue(decl->getASTContext());
             accumBitFieldWidth += bitwidth;
@@ -1861,12 +1899,17 @@ void DlangBindGenerator::writeFnRuntimeArgs(const clang::FunctionDecl* fn)
             if (isNull)
                 os << "null";
             else 
-                printPrettyD(defaultVal, os, nullptr, *DlangBindGenerator::g_printPolicy);
+                printPrettyD(defaultVal, os, nullptr, *DlangBindGenerator::g_printPolicy, 0, &fn->getASTContext(), feedback);
             out << " = " << os.str();
 
             // add rvalue-ref hack
             if (fp->getType()->isReferenceType()) 
             {
+                
+                if (auto rec = defaultVal->getType()->getAsRecordDecl(); rec && rec->getIdentifier())
+                    feedback->addAction(
+                        std::move(std::make_unique<AddRvalueHackAction>(rec->getName()))
+                    );
                 // TODO: skip on function calls
                 out << ".byRef ";
             }
@@ -1899,7 +1942,7 @@ void DlangBindGenerator::writeTemplateArgs(const clang::TemplateDecl* td)
             {
                 std::string s;
                 llvm::raw_string_ostream os(s);
-                printPrettyD(defaultVal, os, nullptr, *DlangBindGenerator::g_printPolicy);
+                printPrettyD(defaultVal, os, nullptr, *DlangBindGenerator::g_printPolicy, 0, &td->getASTContext(), feedback);
                 out << " = " << os.str();
             }
         }
@@ -1981,7 +2024,7 @@ void DlangBindGenerator::writeFnBody(clang::FunctionDecl* fn, bool commentOut)
         llvm::raw_string_ostream os(s);
         std::stringstream ss;
         DPrinterHelper_PointerReturn rp;
-        printPrettyD(expr, os, ptrRet ? &rp : nullptr, *DlangBindGenerator::g_printPolicy, 0, ast);
+        printPrettyD(expr, os, ptrRet ? &rp : nullptr, *DlangBindGenerator::g_printPolicy, 0, ast, feedback);
         ss << os.str();
         std::string line;
         while (std::getline(ss, line))
@@ -2283,4 +2326,23 @@ std::tuple<std::string, std::string, bool> DlangBindGenerator::getOperatorName(c
     }
 
     return std::make_tuple(funcName, opSign, customMangle);
+}
+
+
+void FeedbackContext::addAction(std::unique_ptr<FeedbackAction> action)
+{
+    actions.push_back(std::move(action));
+}
+
+
+void AddRvalueHackAction::apply(DlangBindGenerator* generator)
+{
+    if (auto st = generator->declLocations.find(declName); st != generator->declLocations.end())
+    {
+        static const std::string mixin = "mixin RvalueRef;";
+        generator->bufOut.seekp(st->second.line);
+        auto b = generator->bufOut.rdbuf()->str();
+        b.insert(st->second.line, std::string(st->second.indent, ' ') + mixin);
+        generator->bufOut.rdbuf()->str(b);
+    }
 }
