@@ -986,16 +986,13 @@ public:
 
     bool VisitCXXNamedCastExpr(CXXNamedCastExpr *Node) 
     {
-        // Try get pointer instead of reference because there is no ref variables
         bool isRef = Node->getTypeAsWritten()->isReferenceType();
         OS << "cast(";
-        //if (isRef)
-        //    OS << DlangBindGenerator::toDStyle(adjustForVariable(Node->getTypeAsWritten(), const_cast<ASTContext*>(Context)));
-        //else
+        if (isRef)
+            OS << DlangBindGenerator::toDStyle(Node->getTypeAsWritten()->getPointeeType());
+        else
             OS << DlangBindGenerator::toDStyle(Node->getTypeAsWritten());
         OS << ")(";
-        if (isRef)
-            OS << "&";
         TraverseStmt(Node->getSubExpr());
         OS << ")";
         return false;
