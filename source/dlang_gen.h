@@ -91,6 +91,7 @@ public:
 class NamespacePolicy;
 class NamespacePolicy_StringList;
 
+class IncludeMap;
 
 struct DeclLocation
 {
@@ -137,6 +138,8 @@ public:
     gentool::InputOptions const* iops;
     gentool::OutputOptions const* outops;
 
+    std::unique_ptr<IncludeMap> headerModuleMap = std::make_unique<IncludeMap>();
+
 protected:
     FeedbackContext* feedback;
     int localAnonRecordId = 1; // specific to top records anonimous counter
@@ -171,6 +174,12 @@ public:
     void onMacroDefine(const clang::Token* name, const clang::MacroDirective* macro);
     void setSourceManager(clang::SourceManager* SM) { this->SourceMgr = SM; }
     void setSema(clang::Sema* Sema) { this->sema = Sema; }
+    void onInclude(
+        StringRef FileName, 
+        StringRef RelativePath, 
+        StringRef SearchPath, 
+        bool IsAngled, 
+        clang::SrcMgr::CharacteristicKind FileType);
 
     // Get file path and line & column parts (if any) from source location
     static std::tuple<std::string, std::string> getFSPathPart(const std::string_view loc);
@@ -256,18 +265,51 @@ public:
 class FeedbackAction
 {
 public:
+    enum ActionKind {
+        AK_OrderDependent,
+        AK_AddRvalueHack,
+        AK_OrderDependentLast,
+        AK_AddImport
+    };
+
+    FeedbackAction(ActionKind Kind) : Kind(Kind) {}
     virtual void apply(DlangBindGenerator* generator) {}
     virtual ~FeedbackAction() {}
+    ActionKind getKind() const { return Kind; }
+private:
+    const ActionKind Kind;
 };
 
 class AddRvalueHackAction : public FeedbackAction
 {
 public:
-    AddRvalueHackAction(std::string declName) : declName(declName) {}
+    AddRvalueHackAction(std::string declName) : FeedbackAction(AK_AddRvalueHack), declName(declName) {}
 
     virtual void apply(DlangBindGenerator* generator) override;
 
+    static bool classof(const FeedbackAction* A)
+    {
+        return A->getKind() == AK_AddRvalueHack;
+    }
+
     std::string declName;
+};
+
+class AddImportAction : public FeedbackAction
+{
+public:
+    AddImportAction(std::string module) : FeedbackAction(AK_AddImport), module(module) {}
+
+    virtual void apply(DlangBindGenerator* generator) override;
+
+    static bool classof(const FeedbackAction* A)
+    {
+        return A->getKind() == AK_AddImport;
+    }
+
+    bool operator== (const AddImportAction& other) { return module == other.module; }
+
+    std::string module;
 };
 
 class FeedbackContext
@@ -283,4 +325,17 @@ class NullFeedbackContext : public FeedbackContext
 {
 public:
     virtual void addAction(std::unique_ptr<FeedbackAction> action) override {}
+};
+
+
+
+class IncludeMap
+{
+public:
+    IncludeMap();
+    std::string find(const std::string& header);
+    void add(const std::string& header, const std::string& mappedModule);
+private:
+    static bool isGlobalMatchAny(const std::string& path) { return path == "*"; }
+    std::map<std::string, std::string> _mappings;
 };

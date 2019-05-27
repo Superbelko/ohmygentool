@@ -549,7 +549,7 @@ void DlangBindGenerator::finalize()
     std::set<std::string> rvals;
     std::vector<AddRvalueHackAction*> rvas;
     for(std::unique_ptr<FeedbackAction>& p : feedback->actions)
-        if (auto a = static_cast<AddRvalueHackAction*>(p.get()))
+        if (auto a = dyn_cast<AddRvalueHackAction>(p.get()))
         {
             if (rvals.find(a->declName) != rvals.end())
                 continue;
@@ -572,6 +572,23 @@ void DlangBindGenerator::finalize()
         }
     );
     for(auto a : rvas)
+        a->apply(this);
+
+    // well, that sucks
+    // TODO: fix duplication
+    std::set<std::string> impmod;
+    std::vector<AddImportAction*> imports;
+    for(auto& a : feedback->actions)
+    {
+        if (auto addImport = dyn_cast<AddImportAction>(a.get()))
+        {
+            if (impmod.find(addImport->module) != impmod.end())
+                continue;
+            imports.push_back(addImport);
+            impmod.insert(addImport->module);
+        }
+    }
+    for (auto a : imports)
         a->apply(this);
 
     std::ofstream out;
@@ -644,6 +661,20 @@ void DlangBindGenerator::onMacroDefine(const clang::Token* name, const clang::Ma
             out << "//#define " << id.str()
                 << " ..." << std::endl;
         }
+    }
+}
+
+void DlangBindGenerator::onInclude(
+        StringRef FileName, 
+        StringRef RelativePath, 
+        StringRef SearchPath, 
+        bool IsAngled, 
+        clang::SrcMgr::CharacteristicKind FileType)
+{
+    auto mod = headerModuleMap->find(FileName.str());
+    if (!mod.empty())
+    {
+        feedback->addAction(std::move(std::make_unique<AddImportAction>(mod)));
     }
 }
 
@@ -2345,4 +2376,49 @@ void AddRvalueHackAction::apply(DlangBindGenerator* generator)
         b.insert(st->second.line, std::string(st->second.indent, ' ') + mixin);
         generator->bufOut.rdbuf()->str(b);
     }
+}
+
+
+void AddImportAction::apply(DlangBindGenerator* generator)
+{
+    //generator->bufOut.seekp(0);
+    auto b = generator->bufOut.rdbuf()->str();
+    b.insert(0, std::string("import ") + module + ";\n");
+    generator->bufOut.rdbuf()->str(b);
+}
+
+
+IncludeMap::IncludeMap()
+{
+    add("stdio.h", "core.stdc.stdio");
+    add("cstdio", "core.stdc.stdio");
+    add("string.h", "core.stdc.string");
+    add("cstring", "core.stdc.stdio");
+    add("float.h", "core.stdc.float_");
+    add("cfloat", "core.stdc.float_");
+}
+
+std::string IncludeMap::find(const std::string& header)
+{
+    if (isGlobalMatchAny(header))
+        return std::string();
+
+    std::string path = header;
+    auto pos = path.find("\\");
+    while(pos != std::string::npos)
+    {
+        path.replace(pos, 1, "/");
+        pos = path.find("\\");
+    }
+
+    auto m = _mappings.find(path);
+    return m == _mappings.end() ? std::string() : m->second;
+}
+
+void IncludeMap::add(const std::string& header, const std::string& mappedModule)
+{
+    if (isGlobalMatchAny(header))
+        return;
+
+    _mappings.insert(std::make_pair(header, mappedModule));
 }

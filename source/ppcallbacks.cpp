@@ -105,3 +105,19 @@ void PPCallbacksTracker::MacroUndefined(
     const clang::MacroDirective *Undef)
 {
 }
+
+
+void PPCallbacksTracker::InclusionDirective(
+    clang::SourceLocation HashLoc,
+    const clang::Token &IncludeTok,
+    StringRef FileName,
+    bool IsAngled,
+    clang::CharSourceRange FilenameRange,
+    const clang::FileEntry *File,
+    StringRef SearchPath,
+    StringRef RelativePath,
+    const clang::Module *Imported,
+    clang::SrcMgr::CharacteristicKind FileType)
+{
+    Listener->onInclude(FileName, RelativePath, SearchPath, IsAngled, FileType);
+}
