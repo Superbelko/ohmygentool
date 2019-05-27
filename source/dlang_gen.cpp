@@ -49,7 +49,7 @@ thread_local clang::PrintingPolicy *DlangBindGenerator::g_printPolicy;
 
 // D reserved keywords, possible overlaps from C/C++ sources
 std::vector<std::string> reservedIdentifiers = {
-    "out", "ref", "version", "debug", "mixin", "with", "unittest", "typeof", "typeid", "super", "body",
+    "align", "out", "ref", "version", "debug", "mixin", "with", "unittest", "typeof", "typeid", "super", "body",
     "shared", "pure", "package", "module", "inout", "in", "is", "import", "invariant", "immutable", "interface",
     "function", "delegate", "final", "export", "deprecated", "alias", "abstract", "synchronized",
     "byte", "ubyte", "uint", "ushort", "string"
@@ -426,7 +426,7 @@ std::string macroToString(const clang::MacroInfo* macro)
     {
         if (tok.isAnyIdentifier())
         {
-            os << tok.getIdentifierInfo()->getName();
+            os << DlangBindGenerator::sanitizedIdentifier(tok.getIdentifierInfo()->getName());
         }
         else if (tok.isLiteral())
         {
@@ -591,7 +591,7 @@ void DlangBindGenerator::onMacroDefine(const clang::Token* name, const clang::Ma
             os << "(";
         for (auto p : mi->params())
         {
-            os << p->getName().str();
+            os << sanitizedIdentifier(p->getName().str());
             if (p != *(mi->param_end()-1)) os << ", ";
         }
         if (mi->getNumParams())
