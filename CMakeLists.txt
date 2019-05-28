@@ -39,6 +39,7 @@ SET(SOURCE_LIST
     source/iohelpers.cpp
     source/compiler.cpp
     source/options.cpp
+    source/postedits.cpp
 )
 
 if (GENTOOL_LIB)

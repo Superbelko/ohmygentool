@@ -26,7 +26,7 @@
 #include "clang/CodeGen/CodeGenAction.h"
 #include "clang/Lex/PreprocessorOptions.h"
 
-
+#include "postedits.h"
 
 
 using namespace clang;
