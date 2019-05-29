@@ -207,6 +207,7 @@ private:
     void handleFields(const clang::RecordDecl* decl);
     void handleInnerDecls(const clang::RecordDecl* decl);
     std::string getNextMixinId();
+    void addStructDefaultCtorReplacement(const clang::CXXConstructorDecl* ctor, const std::string_view knownMangling);
 
     // Functions below are specific to functions 
     void writeFnRuntimeArgs(const clang::FunctionDecl* fn);

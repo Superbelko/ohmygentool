@@ -1898,8 +1898,41 @@ void DlangBindGenerator::handleMethods(const clang::CXXRecordDecl *decl)
             out << ";" << std::endl;
     
         out << std::endl;
+
+        if (isDefaultCtor && !isVirtualDecl)
+            addStructDefaultCtorReplacement(dyn_cast<CXXConstructorDecl>(m), mangledName);
     }
 }
+
+
+void DlangBindGenerator::addStructDefaultCtorReplacement(const clang::CXXConstructorDecl* ctor, const std::string_view knownMangling)
+{
+    static const auto suffix = "_default_ctor";
+
+    // write mangling part
+    if (!ctor->getBody())
+    {
+        if (!knownMangling.empty())
+            out << "pragma (mangle, \"" << knownMangling << "\")" << std::endl;
+        out << "extern(C++) ";
+    }
+
+    out << getAccessStr(ctor->getAccess(), true /*isStruct*/) << " ";
+    out << "final void ";
+    out << suffix;
+    out << "(";
+    writeFnRuntimeArgs(ctor);
+    out << ")";
+    if (ctor->getBody()) 
+    {
+        out << " ";
+        writeFnBody(const_cast<CXXConstructorDecl*>(ctor));
+    }
+    else
+        out << ";" << std::endl;
+    out << std::endl;
+}
+
 
 void DlangBindGenerator::writeFnRuntimeArgs(const clang::FunctionDecl* fn)
 {
