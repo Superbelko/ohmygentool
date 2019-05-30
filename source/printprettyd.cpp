@@ -826,6 +826,26 @@ public:
         return true;
     }
 
+    bool VisitDependentScopeDeclRefExpr(DependentScopeDeclRefExpr *Node) 
+    {
+        if (NestedNameSpecifier *Qualifier = Node->getQualifier())
+            switch(Qualifier->getKind())
+            {
+                case NestedNameSpecifier::SpecifierKind::TypeSpec:
+                case NestedNameSpecifier::SpecifierKind::TypeSpecWithTemplate:
+                    OS << DlangBindGenerator::toDStyle(QualType(Qualifier->getAsType(), 0)) << ".";
+                    break;
+                default:
+                    Qualifier->print(OS, Policy);
+            }
+        //if (Node->hasTemplateKeyword())
+        //    OS << "template ";
+        OS << Node->getNameInfo();
+        if (Node->hasExplicitTemplateArgs())
+            printDTemplateArgumentList(OS, Node->template_arguments(), Policy);
+        return true;
+    }
+
     bool VisitUnaryExprOrTypeTraitExpr(UnaryExprOrTypeTraitExpr *Node)
     {
         bool typeofThis = false;
