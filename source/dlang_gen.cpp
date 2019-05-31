@@ -1791,7 +1791,7 @@ void DlangBindGenerator::handleMethods(const clang::CXXRecordDecl *decl)
         }
 
 
-        bool possibleOverride = !m->isPure() && (!(isCtor || isDtor) && overridesBaseOf(m, decl));
+        bool possibleOverride = !(isCtor || isDtor) && overridesBaseOf(m, decl);
         bool cantOverride = possibleOverride && !(m->hasAttr<OverrideAttr>() || m->isVirtual());
         bool commentOut = (!isVirtualDecl && isDefaultCtor) || isIdentityAssignmentOperator(m) || (isVirtualDecl && cantOverride);
         // default ctor for struct not allowed
@@ -1853,14 +1853,15 @@ void DlangBindGenerator::handleMethods(const clang::CXXRecordDecl *decl)
 
         out << getAccessStr(m->getAccess(), !decl->isClass()) << " ";
 
-        if (!cantOverride && isVirtualDecl && possibleOverride)
-            out << "override ";
 
         if (m->isStatic())
             out << "static ";
 
         if (isVirtualDecl && m->isPure())
             out << "abstract ";
+
+        if (isVirtualDecl && possibleOverride)
+            out << "override ";
 
         if (isVirtualDecl && !m->isVirtual())
             out << "final ";
