@@ -2398,12 +2398,62 @@ std::tuple<std::string, std::string, bool> DlangBindGenerator::getOperatorName(c
 
 IncludeMap::IncludeMap()
 {
-    add("stdio.h", "core.stdc.stdio");
-    add("cstdio", "core.stdc.stdio");
-    add("string.h", "core.stdc.string");
-    add("cstring", "core.stdc.stdio");
+    add("complex.h", "core.stdc.complex");
+
+    add("ctype.h", "core.stdc.ctype");
+    add("cctype", "core.stdc.ctype");
+
+    add("errno.h", "core.stdc.errno");
+    add("cerrno", "core.stdc.errno");
+
+    add("fenv.h", "core.stdc.fenv");
+
     add("float.h", "core.stdc.float_");
     add("cfloat", "core.stdc.float_");
+
+    add("inttypes.h", "core.stdc.inttypes");
+
+    add("limits.h", "core.stdc.limits");
+    add("climits", "core.stdc.limits");
+
+    add("locale.h", "core.stdc.locale");
+    add("clocale", "core.stdc.locale");
+
+    add("math.h", "core.stdc.math");
+    add("cmath", "core.stdc.math");
+
+    add("signal.h", "core.stdc.signal");
+    add("csignal", "core.stdc.signal");
+
+    add("stdarg.h", "core.stdc.stdarg");
+    add("cstdarg", "core.stdc.stdarg");
+
+    add("stddef.h", "core.stdc.stddef");
+    add("cstddef", "core.stdc.stddef");
+
+    add("stdint.h", "core.stdc.stdint");
+    add("cstdint", "core.stdc.stdint");
+
+    add("stdio.h", "core.stdc.stdio");
+    add("cstdio", "core.stdc.stdio");
+
+    add("stdlib.h", "core.stdc.stdlib");
+    add("cstdlib", "core.stdc.stdlib");
+
+    add("string.h", "core.stdc.string");
+    add("cstring", "core.stdc.string");
+
+    add("tgmath.h", "core.stdc.tgmath");
+    add("ctgmath", "core.stdc.tgmath");
+
+    add("time.h", "core.stdc.time");
+    add("ctime", "core.stdc.time");
+
+    add("wchar.h", "core.stdc.wchar_");
+    add("cwchar", "core.stdc.wchar_");
+
+    add("wctype.h", "core.stdc.wctype");
+    add("cwctype", "core.stdc.wctype");
 }
 
 std::string IncludeMap::find(const std::string& header)
