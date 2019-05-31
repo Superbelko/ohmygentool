@@ -200,7 +200,7 @@ public:
             }
             if (!ImplicitInit)
             {
-                if ((D->getInitStyle() == VarDecl::CallInit) && !isa<ParenListExpr>(Init))
+                if ((D->getInitStyle() == VarDecl::CallInit))
                     OS << " = " << typeString << "("; // D doesn't have C++ ctor call syntax for variables
                 else if (D->getInitStyle() == VarDecl::CInit)
                 {
@@ -208,7 +208,7 @@ public:
                 }
 
                 TraverseStmt(Init);
-                if ((D->getInitStyle() == VarDecl::CallInit) && !isa<ParenListExpr>(Init))
+                if ((D->getInitStyle() == VarDecl::CallInit))
                     OS << ")";
             }
         }
