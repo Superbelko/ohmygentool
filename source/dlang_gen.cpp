@@ -327,7 +327,7 @@ bool overridesBaseOf(const FunctionDecl* fn, const CXXRecordDecl* rec)
             return true;
         return std::equal(a->param_begin(), a->param_end(), b->param_begin(), b->param_end(), 
             [](const ParmVarDecl* p1, const ParmVarDecl* p2) {
-                return p1->getType() == p2->getType();
+                return p1->getType() == p2->getType() || p1->getNameAsString() == p2->getNameAsString();
         });
     };
     if (rec && rec->getDefinition())
@@ -1791,7 +1791,7 @@ void DlangBindGenerator::handleMethods(const clang::CXXRecordDecl *decl)
         }
 
 
-        bool possibleOverride = !(isCtor || isDtor) && overridesBaseOf(m, decl);
+        bool possibleOverride = !(isCtor || isDtor) && (overridesBaseOf(m, decl) || (m->size_overridden_methods() > 0));
         bool cantOverride = possibleOverride && !(m->hasAttr<OverrideAttr>() || m->isVirtual());
         bool commentOut = (!isVirtualDecl && isDefaultCtor) || isIdentityAssignmentOperator(m) || (isVirtualDecl && cantOverride);
         // default ctor for struct not allowed
