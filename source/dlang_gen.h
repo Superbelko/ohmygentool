@@ -175,9 +175,9 @@ public:
     void setSourceManager(clang::SourceManager* SM) { this->SourceMgr = SM; }
     void setSema(clang::Sema* Sema) { this->sema = Sema; }
     void onInclude(
-        StringRef FileName, 
-        StringRef RelativePath, 
-        StringRef SearchPath, 
+        llvm::StringRef FileName, 
+        llvm::StringRef RelativePath, 
+        llvm::StringRef SearchPath, 
         bool IsAngled, 
         clang::SrcMgr::CharacteristicKind FileType);
 

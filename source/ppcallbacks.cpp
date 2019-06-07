@@ -110,12 +110,12 @@ void PPCallbacksTracker::MacroUndefined(
 void PPCallbacksTracker::InclusionDirective(
     clang::SourceLocation HashLoc,
     const clang::Token &IncludeTok,
-    StringRef FileName,
+    llvm::StringRef FileName,
     bool IsAngled,
     clang::CharSourceRange FilenameRange,
     const clang::FileEntry *File,
-    StringRef SearchPath,
-    StringRef RelativePath,
+    llvm::StringRef SearchPath,
+    llvm::StringRef RelativePath,
     const clang::Module *Imported,
     clang::SrcMgr::CharacteristicKind FileType)
 {
