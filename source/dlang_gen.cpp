@@ -5,6 +5,7 @@
 #include <iomanip>
 #include <memory>
 
+#include "llvm/Config/llvm-config.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "clang/AST/AST.h"
@@ -1727,7 +1728,13 @@ void DlangBindGenerator::handleMethods(const clang::CXXRecordDecl *decl)
         bool customMangle = false;
 
         // TODO: implicit methods starts at decl position itself, skip anything already listed
-        std::string locString = m->getLocStart().printToString(decl->getASTContext().getSourceManager());
+        clang::SourceLocation location;
+#if (LLVM_VERSION_MAJOR < 8)
+        location m->getLocStart();
+#else
+        location = m->getBeginLoc();
+#endif
+        std::string locString = location.printToString(decl->getASTContext().getSourceManager());
         if (std::find_if(storedTypes.begin(), storedTypes.end(), [&locString](const auto& pair) { return pair.first == locString; } ) != storedTypes.end())
         {
             continue;

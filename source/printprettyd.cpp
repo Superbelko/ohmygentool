@@ -4,6 +4,7 @@
 #include <iomanip>
 #include <memory>
 
+#include "llvm/Config/llvm-config.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "clang/AST/AST.h"
 #include "clang/AST/ASTConsumer.h"
@@ -1118,8 +1119,15 @@ public:
         auto noImpCastsRHS = Node->getRHS()->IgnoreImpCasts();
         if (isPtr && isa<IntegerLiteral>(noImpCastsRHS))
         {
+            bool isNullVal;
+#if (LLVM_VERSION_MAJOR < 8)
             llvm::APSInt res;
-            if (noImpCastsRHS->EvaluateAsInt(res, *Context) && res.isNullValue())
+            isNullVal = noImpCastsRHS->EvaluateAsInt(res, *Context) && res.isNullValue();
+#else
+            Expr::EvalResult res;
+            isNullVal = noImpCastsRHS->EvaluateAsInt(res, *Context) && res.Val.getInt().isNullValue();
+#endif
+            if (isNullVal)
             {
                 OS << "null";
             }
