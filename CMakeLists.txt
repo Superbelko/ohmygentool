@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.0) # 3.10 for VS /std:c++17 switch
+cmake_minimum_required(VERSION 3.3) # 3.10 for VS /std:c++17 switch
 project(gentool)
 
 option(GENTOOL_LIB "Build gentool as library")
@@ -50,24 +50,6 @@ else()
     add_executable(gentool ${SOURCE_LIST})
 endif()
 
-
-
-# Find the libraries that correspond to the LLVM components
-# that we wish to use
-llvm_map_components_to_libnames(llvm_libs support core irreader)
-
-# Link against LLVM libraries
-target_link_libraries( gentool 
-    ${LLVM}
-    clangAST
-    clangBasic
-    clangFrontend
-    clangLex
-    clangParse
-    clangSema
-    clangTooling
-)
-
 set_property(TARGET gentool PROPERTY CXX_STANDARD 17)
 set_property(TARGET gentool PROPERTY CXX_STANDARD_REQUIRED ON)
 
@@ -92,7 +74,7 @@ check_cxx_source_compiles(
     " GENTOOL_LLVM_LIBCXX
 )
 
-if (UNIX)
+if (UNIX AND NOT GENTOOL_LIB)
     
     if (${GENTOOL_GNU_LIBCXX})
         target_link_libraries(gentool -lstdc++)
@@ -109,4 +91,67 @@ if (UNIX)
     endif ()
 
     target_compile_options(gentool PRIVATE "-fno-rtti")
-endif (UNIX)
+endif ()
+
+# pick libraries 
+if (LLVM_LINK_LLVM_DYLIB) 
+  if ("clang-cpp" IN_LIST CLANG_EXPORTED_TARGETS)
+    message(STATUS "Using dynamic (single library) LLVM and libclang ")
+    # newer libs used with dylib options
+    target_link_libraries( gentool 
+        LLVM
+        clang
+        clang-cpp
+    )
+  else()
+    message(FATAL_ERROR "Unsupported. LLVM dynamic library should be used with dynamic libclang as well")
+  endif()
+else()
+    message(STATUS "Using LLVM and libclang components libs")
+    # plain old libs
+    # Find the libraries that correspond to the LLVM components
+    # that we wish to use
+    llvm_map_components_to_libnames(llvm_libs support core irreader)
+
+    # Link against LLVM libraries
+    target_link_libraries( gentool 
+        ${llvm_libs}
+        clangAST
+        clangBasic
+        clangFrontend
+        clangLex
+        clangParse
+        clangSema
+        clangTooling
+    )
+endif()
+
+if (GENTOOL_LIB)
+    if (UNIX)
+        set(DUMP_LIBS_FILENAME "${CMAKE_CACHEFILE_DIR}/linklibs.txt")
+    else()
+        set(DUMP_LIBS_FILENAME "${CMAKE_CURRENT_SOURCE_DIR}/set_env.bat")
+    endif()
+
+    message(STATUS "llvm dir " ${LLVM_USED_LIBS})
+
+    get_target_property(libs_list gentool LINK_LIBRARIES)
+    message(STATUS "Writing libs file ${DUMP_LIBS_FILENAME}")
+    file(WRITE "${DUMP_LIBS_FILENAME}" "${libs_list}")
+
+    message(STATUS "Generating set_env scripts")
+    set(DUB_RUN_SCRIPT dub run "-q" "--single" "${CMAKE_CURRENT_SOURCE_DIR}/scripts/makeenv.d" "--" ${DUMP_LIBS_FILENAME} ${CMAKE_CURRENT_SOURCE_DIR})
+    execute_process(COMMAND ${DUB_RUN_SCRIPT}
+                    RESULT_VARIABLE makeenv_status
+                    OUTPUT_VARIABLE makeenv_report
+                    ERROR_VARIABLE makeenv_except
+    )
+    #message(STATUS "status ${makeenv_status}")
+    #message(STATUS "report ${makeenv_report}")
+    #message(STATUS "except ${makeenv_except}")
+    if (makeenv_status STREQUAL 0)
+        message(STATUS "${makeenv_report}")
+    else()
+        message(SEND_ERROR "${makeenv_except}")
+    endif()
+endif()
