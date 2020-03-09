@@ -12,10 +12,11 @@ int main(string[] args)
 
     auto libListPath = args[1];
     auto targetPath = args[2];
+    auto llvmDir = args[3];
 
     const command = readText(libListPath)
         .parseList()
-        .makeEnv();
+        .makeEnv(llvmDir);
 
     targetPath.scriptFile.write(command);
 
@@ -47,19 +48,27 @@ string[] parseList(string rawList)
         .array();
 }
 
-string makeEnv(string[] libs)
+string makeEnv(string[] libs, string llvmDir = null)
 {
     import std.conv : text;
     import std.algorithm : map, joiner;
     import std.format : format;
+    import std.path : buildNormalizedPath, dirSeparator;
 
     auto res = libs
         .map!(s => "-L-l" ~ s)
         .joiner(" ")
         .text;
 
+    // folder that contains llvm cmake config (e.g. ~/llvm-build/lib/cmake/llvm)
+    // we are interested in static libraries files location
+    if (llvmDir)
+        llvmDir = buildNormalizedPath(llvmDir, "..", "..");
+
+    // windows linker flags is for LDC2, for DMD you'll need to prepend it with -L
     version(Windows)
-    return "set LINK=\"%s\"\ndub build".format(res);
+    return "set LFLAGS=%s\nset LIB=%s;build\\Release\ndub build --build=release"
+        .format(llvmDir~dirSeparator~"*.lib", llvmDir);
     else
-    return "export LFLAGS=\"%s\"\ndub build".format(res);
+    return "export LFLAGS=\"%s\"\nexport LIBRARY_PATH=%s\ndub build --build=release".format(res, llvmDir);
 }

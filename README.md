@@ -51,33 +51,35 @@ USE ON YOUR OWN RISK!
 * CMake (3.10+ on Windows)
 * D compiler (DMD or LDC2) with DUB build system (usually shipped with compiler)
 ##### Libraries
-* LLVM (7.0 recommended)
-* Clang (7.0 recommended)
+* LLVM (7, 8, or 9)
+* Clang (7.0-9.0)
 * RapidJSON
 
-LLVM 7 / Clang 7 recommended, but Clang 6 might work as well.
+*Clang 6 might work as well, but is not supported.
 
 ##### Instructions
 *Please note that building LLVM alone will take about 45 minutes on my machine, and over 1.5 hours with Clang*
-* Build LLVM, preferably Debug configuration (might require configuring as static library target on non-Windows)
+* Build LLVM with Clang
     * Set-up LLVM_DIR environment variable with _/path/to/your_llvm_build_
 * **OR** you can also try your OS package manager prebuilt binaries *(for example 'libclang-7-dev llvm-7-dev' packages on Ubuntu)*, this can save you hours of waiting and up to 40 GB of disk space
 * Copy RapidJSON *include* folder to gentool *include* folder
-* Set up CLANG_LIB_PATH environment variable to where .lib/.a LLVM & Clang libs can be found
-* Build!
+* Build using CMake!
 ```
 mkdir build
 cd build
-cmake ../ -DCMAKE_GENERATOR_PLATFORM=x64
-cmake --build . --config Debug
-cd ..
-dub build --arch=x86_64
+cmake ../ -DCMAKE_GENERATOR_PLATFORM=x64 -DLLVM_DIR=/path/to/llvm/build
+cmake --build . --config Release
 ```
 *-DCMAKE_GENERATOR_PLATFORM=x64 here is not required, just shows how to quickly generate x64 on Windows*
+
+*-DGENTOOL_LIB=ON can be used to build library usable with D main executable, doing this will generate dubBuild.{sh|bat} file with set up paths and variables for building with dub*
 
 **Linux note:**  
     It may fail to link due to lib order, in this case try using lld linker
 
+**Note**  
+    Since Clang 9 some Linux package management systems taken a step to use LLVM/Clang as dynamic library, this is not recommended approach, in case if you have issues with it build and use static libs instead. Even though for personal use this might work, you are on your own.
+
 After these steps you will have nice and compact 66 MB executable.
 
-Relax and enjoy the new way of extern(C)/extern(C++) making!
+~~Relax and enjoy~~ Embrace the new pain and suffering possibilities when making extern(C)/extern(C++) bindings!

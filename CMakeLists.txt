@@ -127,20 +127,14 @@ else()
 endif()
 
 if (GENTOOL_LIB)
-    if (UNIX)
-        set(DUMP_LIBS_FILENAME "${CMAKE_CACHEFILE_DIR}/linklibs.txt")
-    else()
-        set(DUMP_LIBS_FILENAME "${CMAKE_CURRENT_SOURCE_DIR}/set_env.bat")
-    endif()
-
-    message(STATUS "llvm dir " ${LLVM_USED_LIBS})
+    set(DUMP_LIBS_FILENAME "${CMAKE_CACHEFILE_DIR}/linklibs.txt")
 
     get_target_property(libs_list gentool LINK_LIBRARIES)
     message(STATUS "Writing libs file ${DUMP_LIBS_FILENAME}")
     file(WRITE "${DUMP_LIBS_FILENAME}" "${libs_list}")
 
-    message(STATUS "Generating set_env scripts")
-    set(DUB_RUN_SCRIPT dub run "-q" "--single" "${CMAKE_CURRENT_SOURCE_DIR}/scripts/makeenv.d" "--" ${DUMP_LIBS_FILENAME} ${CMAKE_CURRENT_SOURCE_DIR})
+    message(STATUS "Generating build scripts")
+    set(DUB_RUN_SCRIPT dub run "-q" "--single" "${CMAKE_CURRENT_SOURCE_DIR}/scripts/makeenv.d" "--" ${DUMP_LIBS_FILENAME} ${CMAKE_CURRENT_SOURCE_DIR} ${LLVM_DIR})
     execute_process(COMMAND ${DUB_RUN_SCRIPT}
                     RESULT_VARIABLE makeenv_status
                     OUTPUT_VARIABLE makeenv_report

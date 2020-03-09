@@ -7,20 +7,17 @@
 	"copyright": "Copyright © 2019, Superbelko",
 	"name": "gentool",
 	"targetType": "executable",
-	"lflags": ["\" $LFLAGS -L\""],
+	"lflags": [ "\" $LFLAGS -L\"" ],
 	"lflags-posix": ["-Lbuild"],
-	"lflags-windows": ["/LIBPATH:build", "/NODEFAULTLIB:MSVCRT", "/NODEFAULTLIB:ucrt", "/NODEFAULTLIB:libcmt" ],
+	"lflags-windows": ["/LIBPATH:build", "/NODEFAULTLIB:MSVCRT", "/NODEFAULTLIB:libucrt" ],
+	"lflags-windows-debug": ["/NODEFAULTLIB:MSVCRT", "/NODEFAULTLIB:ucrt", "/NODEFAULTLIB:libcmt"],
 	"libs-posix": [ 
 		"stdc++", 
 		"stdc++fs",
 		"tinfo"
 	],
 	"libs-windows": [
-		"version"
-	],
-	"libs-windows-debug": [
-		"ucrtd",
-		"msvcrtd"
+		"version", "ucrt"
 	],
 	"targetPath": "build",
 	"dependencies": { 
