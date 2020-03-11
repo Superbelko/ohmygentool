@@ -63,12 +63,18 @@ string makeEnv(string[] libs, string llvmDir = null)
     // folder that contains llvm cmake config (e.g. ~/llvm-build/lib/cmake/llvm)
     // we are interested in static libraries files location
     if (llvmDir)
+    {
+        version(Windows)
         llvmDir = buildNormalizedPath(llvmDir, "..", "..");
+        else // For some reason on Linux it is one level above
+        llvmDir = buildNormalizedPath(llvmDir, "..");
+    }
 
     // windows linker flags is for LDC2, for DMD you'll need to prepend it with -L
     version(Windows)
     return "set LFLAGS=%s\nset LIB=%s;build\\Release\ndub build --build=release"
         .format(llvmDir~dirSeparator~"*.lib", llvmDir);
     else
-    return "export LFLAGS=\"%s\"\nexport LIBRARY_PATH=%s\ndub build --build=release".format(res, llvmDir);
+    return "export LFLAGS=\"%s\"\nexport LIBRARY_PATH=%s\ndub build --build=release"
+        .format(res, llvmDir);
 }
