@@ -747,15 +747,19 @@ public:
             TraverseStmt(Call->getArg(i));
 
             // add .byRef hack for temporary objects
-            if (auto fn = Call->getDirectCallee())
+            // HACK: this fails on variadic functions/ptr to functions in some cases, for now this second if just prevents crash
+            if (auto fn = Call->getDirectCallee(); fn && fn->getNumParams() && !fn->isVariadic())
             {
                 auto fp = fn->getParamDecl(i);
                 if (fp->getType()->isReferenceType() && isa<MaterializeTemporaryExpr>(Call->getArg(i)))
                 {
                     OS << ".byRef";
+                    if (auto recordDecl = Call->getArg(i)->getType()->getAsRecordDecl())
+                    {
                     Feedback->addAction(
-                        std::move(std::make_unique<AddRvalueHackAction>(Call->getArg(i)->getType()->getAsRecordDecl()->getName()))
+                        std::move(std::make_unique<AddRvalueHackAction>(recordDecl->getName()))
                         );
+                    }
                 }
             }
         }

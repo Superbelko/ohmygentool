@@ -567,10 +567,12 @@ void DlangBindGenerator::finalize()
     std::sort(rvas.begin(), rvas.end(),
         [this](const AddRvalueHackAction* lhs, const AddRvalueHackAction* rhs) {
             if (lhs->declName == rhs->declName)
-                return true;
+                return false;
             auto lpos = declLocations.find(lhs->declName);
             auto rpos = declLocations.find(rhs->declName);
-            return lpos->second.line > rpos->second.line; // descending order
+            if (lpos != declLocations.end() && rpos != declLocations.end())
+                return lpos->second.line > rpos->second.line; // descending order
+            return false;
         }
     );
     for(auto a : rvas)
