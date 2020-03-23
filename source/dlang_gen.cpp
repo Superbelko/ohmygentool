@@ -65,7 +65,7 @@ import std.conv : emplace;
 
 bool isModuleAvailable(alias T)() {
     mixin("import " ~ T ~ ";");
-    static if (__traits(compiles, mixin(T).stringof))
+    static if (__traits(compiles, (mixin(T)).stringof))
         return true;
     else
         return false;
