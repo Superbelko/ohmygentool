@@ -2,3 +2,6 @@
 /include/rapidjson
 tests/**/temp
 tests/**/__pycache__
+**/.dub
+/scripts/makeenv.exe
+/scripts/makeenv
