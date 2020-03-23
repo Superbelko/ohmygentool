@@ -19,7 +19,7 @@ def static_lib_extensions():
 def setup_args(args, config='Release'):
     if is_windows():
         args.append('msvcrt.lib')
-        args.append('-m32mscoff')
+        args.append('-m64')
         args.append('-L/NODEFAULTLIB:libcmt')
         args.append(f'-L/LIBPATH:{config}')
     else:
