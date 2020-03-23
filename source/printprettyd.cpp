@@ -129,6 +129,7 @@ class CppDASTPrinterVisitor : public RecursiveASTVisitor<CppDASTPrinterVisitor>
     const ASTContext *Context;
     bool reverse = false;
     bool isCtorInitializer = false;
+    bool isArrayInitializer = false;
     FeedbackContext* Feedback;
 public:
     explicit CppDASTPrinterVisitor(raw_ostream &os, PrinterHelper *helper,
@@ -207,8 +208,9 @@ public:
                 {
                     OS << " = ";
                 }
-
+                isArrayInitializer = T->isArrayType();
                 TraverseStmt(Init);
+                isArrayInitializer = false;
                 if ((D->getInitStyle() == VarDecl::CallInit))
                     OS << ")";
             }
@@ -683,6 +685,31 @@ public:
         OS << "(";
         TraverseStmt(Node->getSubExpr());
         OS << ")";
+        return false;
+    }
+
+    bool VisitInitListExpr(InitListExpr* Node) 
+    {
+        if (Node->getSyntacticForm()) {
+            TraverseStmt(Node->getSyntacticForm());
+            return false;
+        }
+        if (isArrayInitializer)
+            OS << "[";
+        else
+            OS << "{";
+        for (unsigned i = 0, e = Node->getNumInits(); i != e; ++i) 
+        {
+            if (i) OS << ", ";
+            if (Node->getInit(i))
+                TraverseStmt(Node->getInit(i));
+            else 
+                OS << "{}";
+        }
+        if (isArrayInitializer)
+            OS << "]";
+        else
+            OS << "}";
         return false;
     }
 

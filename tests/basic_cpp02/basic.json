@@ -1,0 +1,17 @@
+{
+    "$schema": "./config-schema.json",
+    "version": 1,
+    "input": {
+        "std": "c++11",
+        "paths": ["../cpp"],
+        "includes": ["../cpp/"],
+        "system": [],
+        "defines": [],
+        "cflags": []
+    },
+    "output": {
+        "path": "generated.d",
+        "target": "dlang",
+        "attr-nogc": false
+    }
+}
