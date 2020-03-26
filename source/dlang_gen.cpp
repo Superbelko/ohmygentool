@@ -304,6 +304,10 @@ bool hasVirtualMethods(const RecordDecl* rd)
     return found || std::any_of(rec->bases_begin(), rec->bases_end(), [](auto a){ return hasVirtualMethods(a.getType()->getAsRecordDecl()); });
 }
 
+bool isPossiblyVirtual(const RecordDecl* rd)
+{
+    return hasVirtualMethods(rd);
+}
 
 // Check for possible overrides. 
 // Including cases where override attribute is not present or not even virtual
@@ -365,7 +369,7 @@ bool overridesBaseOf(const FunctionDecl* fn, const CXXRecordDecl* rec)
 
 clang::QualType adjustForVariable(clang::QualType ty, clang::ASTContext* ctx)
 {
-    bool isVirtual = hasVirtualMethods(ty->getAsRecordDecl());
+    bool isVirtual = isPossiblyVirtual(ty->getAsRecordDecl());
     if (isVirtual)
     {
         // Class in D is reference type, so remove first pointer
@@ -478,6 +482,21 @@ bool isPrimitiveMacro(const clang::MacroInfo* macro)
     return std::all_of(b, e, [](Token tok) { return isLiteralOrOperator(tok); });
 }
 
+// Retrieves body definition of a base function (or base if not present)
+// It is needed to emit actual parameter names since they might differ from declaration
+// example:
+//   class A { void doStuff(int i); }
+//   ...
+//   void A::doStuff(int value) { ... }
+// will give second method with actual implementation
+const FunctionDecl* getFnBody(const FunctionDecl* base)
+{
+    const FunctionDecl* fndef = nullptr;
+    base->getBody(fndef);
+    if (!fndef)
+        fndef = base;
+    return fndef;
+}
 
 bool DlangBindGenerator::isRelevantPath(const std::string_view path)
 {
@@ -754,7 +773,7 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
     if (cxxdecl && (cxxdecl->getNumBases() || cxxdecl->getNumVBases()))
         isDerived = true;
 
-    bool isVirtual = hasVirtualMethods(decl);
+    bool isVirtual = isPossiblyVirtual(decl);
     if (isVirtual)
         out << "class ";
     else if (decl->isUnion())
@@ -867,7 +886,7 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
             {
                 numBases--;
                 RecordDecl* rd = b.getType()->getAsRecordDecl(); 
-                if (rd && !hasVirtualMethods(cast<RecordDecl>(rd)))
+                if (rd && !isPossiblyVirtual(cast<RecordDecl>(rd)))
                     out << rd->getNameAsString() << " ";
                 // templated base class
                 else if (b.getType()->getTypeClass() == Type::TypeClass::TemplateSpecialization)
@@ -1005,7 +1024,7 @@ void DlangBindGenerator::onFunction(const clang::FunctionDecl *decl)
 
     // argument list
     out << "(";
-    writeFnRuntimeArgs(fn);
+    writeFnRuntimeArgs(getFnBody(fn));
     out << ")";
     if (nogc)
         out << " @nogc";
@@ -1455,7 +1474,7 @@ void DlangBindGenerator::printBases(const clang::CXXRecordDecl *decl)
     {
         numBases--;
         Decl* rd = b.getType()->getAsRecordDecl(); 
-        if (rd && !hasVirtualMethods(cast<RecordDecl>(rd)))
+        if (rd && !isPossiblyVirtual(cast<RecordDecl>(rd)))
             continue;
         
         if (first) {
@@ -1477,7 +1496,7 @@ std::vector<const clang::CXXRecordDecl*> DlangBindGenerator::getNonVirtualBases(
     {
         auto rd = b.getType()->getAsRecordDecl(); 
         if (rd) 
-            if (auto cxxrec = cast<CXXRecordDecl>(rd); !hasVirtualMethods(cxxrec))
+            if (auto cxxrec = cast<CXXRecordDecl>(rd); !isPossiblyVirtual(cxxrec))
                 nonvirt.push_back(cxxrec);
     }
 
@@ -1705,7 +1724,7 @@ void DlangBindGenerator::handleMethods(const clang::CXXRecordDecl *decl)
     clang::ASTContext *ast = &decl->getASTContext();
     std::unique_ptr<MangleContext> mangleCtx = makeManglingContext(ast);
 
-    bool isVirtualDecl = hasVirtualMethods(decl);
+    bool isVirtualDecl = isPossiblyVirtual(decl);
 
     for (const auto m : decl->methods())
     {
@@ -1890,7 +1909,7 @@ void DlangBindGenerator::handleMethods(const clang::CXXRecordDecl *decl)
         
         // runtime args
         out << "(";
-        writeFnRuntimeArgs(m);
+        writeFnRuntimeArgs(getFnBody(m));
         out << ")";
 
         if (m->isConst())
@@ -1931,7 +1950,7 @@ void DlangBindGenerator::addStructDefaultCtorReplacement(const clang::CXXConstru
     out << "final void ";
     out << suffix;
     out << "(";
-    writeFnRuntimeArgs(ctor);
+    writeFnRuntimeArgs(getFnBody(ctor));
     out << ")";
     if (ctor->getBody()) 
     {
@@ -2133,6 +2152,8 @@ void DlangBindGenerator::writeFnBody(clang::FunctionDecl* fn, bool commentOut)
 
     if (isa<CXXConstructorDecl>(fn))
     {
+        if (classOrStructName == "rcTempVector" && fn->getNumParams() > 1)
+            int x = 0;
         const auto ctdecl = cast<CXXConstructorDecl>(fn);
         hasInitializerList = ctdecl->getNumCtorInitializers() != 0
             && std::find_if( ctdecl->init_begin(), ctdecl->init_end(), 
@@ -2161,7 +2182,7 @@ void DlangBindGenerator::writeFnBody(clang::FunctionDecl* fn, bool commentOut)
                 // check if aliased base class have constructor available
                 if (auto basector = dyn_cast<CXXConstructExpr>(init->getInit()))
                 {
-                    if (!hasVirtualMethods(decl))
+                    if (!isPossiblyVirtual(decl))
                     {
                         auto baserec = basector->getType()->getAsCXXRecordDecl();
                         if ( auto cxxdecl = asCXXDecl(); cxxdecl && cxxdecl->getNumBases() 
@@ -2181,10 +2202,31 @@ void DlangBindGenerator::writeFnBody(clang::FunctionDecl* fn, bool commentOut)
                         }
                     }
                 }
+                
 
                 if (commentOut)
                     out << "//";
-                out << "super(";
+                if (isPossiblyVirtual(decl))
+                    out << "super";
+                else
+                {
+                    if (init->getBaseClass()->getTypeClass() == Type::Typedef)
+                    {
+                        // FIXME: fix multiple inheritance, though it's not supported, not yet
+                        // for this case (when we have non-virtual inheritance) find mixed-in index and call ctor on it
+                        //auto ty = dyn_cast<TypedefType>(init->getBaseClass());
+                        //auto cxxdecl = asCXXDecl();
+                        //auto found = std::find_if(cxxdecl->bases_begin(), cxxdecl->bases_end(), 
+                        //    [ty](CXXBaseSpecifier b) { return b.getType()->getAsRecordDecl() == ty->getAsRecordDecl(); }
+                        //);
+                        //auto baseidx = std::distance(cxxdecl->bases_begin(), found);
+                        //out << "_b" << baseidx;
+                        out << "_b0.__ctor";
+                    }
+                    else
+                        out << init->getBaseClass()->getAsCXXRecordDecl()->getName().str();
+                }
+                out << "(";
                 writeMultilineExpr(init->getInit());
                 out << ");" << std::endl;
             }

@@ -713,6 +713,18 @@ public:
         return false;
     }
 
+    bool VisitParenListExpr(ParenListExpr* Node) 
+    {
+        OS << "(";
+        for (unsigned i = 0, e = Node->getNumExprs(); i != e; ++i) 
+        {
+            if (i) OS << ", ";
+            TraverseStmt(Node->getExpr(i));
+        }
+        OS << ")";
+        return false;
+    }
+
     bool VisitCXXOperatorCallExpr(CXXOperatorCallExpr *Node) 
     {
         const char *OpStrings[NUM_OVERLOADED_OPERATORS] = {

@@ -12,3 +12,8 @@ void testAssert(bool expr, const char* msg)
     if (!expr)
         assertFail(msg);
 }
+
+int Derived::getVal()
+{
+    return val;
+}
