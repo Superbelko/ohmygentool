@@ -73,6 +73,7 @@ void printPrettyD(const clang::CXXCtorInitializer *init, llvm::raw_ostream &OS, 
                      FeedbackContext* feedback = nullptr);
 
 bool hasVirtualMethods(const clang::RecordDecl* rd);
+bool isPossiblyVirtual(const clang::RecordDecl* rd);
 
 // Adjusts ref/pointer types to be used as variable type and wraps/unwraps if necessary
 clang::QualType adjustForVariable(clang::QualType ty, clang::ASTContext* ctx = nullptr);

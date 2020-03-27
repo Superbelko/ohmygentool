@@ -775,6 +775,7 @@ public:
 
     void PrintCallArgs(CallExpr *Call) 
     {
+        auto fn = Call->getDirectCallee();
         for (unsigned i = 0, e = Call->getNumArgs(); i != e; ++i) 
         {
             if (isa<CXXDefaultArgExpr>(Call->getArg(i))) {
@@ -783,6 +784,15 @@ public:
             }
 
             if (i) { OS << ", "; }
+            
+            // pass 'this' for struct pointer by ref
+            if (Call->getArg(i)->getStmtClass() == Stmt::CXXThisExprClass
+                && Call->getArg(i)->getType()->isPointerType() 
+                && !isPossiblyVirtual(fn->parameters()[i]->getType()->getAsRecordDecl()))
+            {
+                OS << "&";
+            }
+
             TraverseStmt(Call->getArg(i));
 
             // add .byRef hack for temporary objects
