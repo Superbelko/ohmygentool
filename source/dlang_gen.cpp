@@ -2226,9 +2226,8 @@ void DlangBindGenerator::writeFnBody(clang::FunctionDecl* fn, bool commentOut)
                     else
                         out << init->getBaseClass()->getAsCXXRecordDecl()->getName().str();
                 }
-                out << "(";
                 writeMultilineExpr(init->getInit());
-                out << ");" << std::endl;
+                out << ";" << std::endl;
             }
         }
 
