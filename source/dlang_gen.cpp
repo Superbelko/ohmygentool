@@ -2190,7 +2190,10 @@ void DlangBindGenerator::writeFnBody(clang::FunctionDecl* fn, bool commentOut)
                             {
                                 if (commentOut)
                                     out << "//";
-                                out << "_b0.__ctor(";
+                                if (ctdecl->isDefaultConstructor())
+                                    out << "_b0._default_ctor(";
+                                else
+                                    out << "_b0.__ctor(";
                                 writeMultilineExpr(init->getInit());
                                 out << ");" << std::endl;
                                 continue;
@@ -2219,7 +2222,10 @@ void DlangBindGenerator::writeFnBody(clang::FunctionDecl* fn, bool commentOut)
                         //);
                         //auto baseidx = std::distance(cxxdecl->bases_begin(), found);
                         //out << "_b" << baseidx;
-                        out << "_b0.__ctor";
+                        if (ctdecl->isDefaultConstructor())
+                            out << "_b0._default_ctor";
+                        else
+                            out << "_b0.__ctor";
                     }
                     else
                         out << init->getBaseClass()->getAsCXXRecordDecl()->getName().str();
