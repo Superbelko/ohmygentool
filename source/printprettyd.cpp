@@ -285,7 +285,13 @@ public:
         OS << "return";
         if (Node->getRetValue()) {
             OS << " ";
-            TraverseStmt(Node->getRetValue());
+            if ((Node->getRetValue()->getType()->isIntegralOrEnumerationType() && Node->getRetValue()->IgnoreImpCasts()->getType()->isIntegralOrEnumerationType())
+                && needsNarrowCast(Node->getRetValue(), Node->getRetValue()->IgnoreImpCasts()))
+            {
+                writeNarrowCast(Node->getRetValue()->getType(), Node->getRetValue()->IgnoreImpCasts());
+            }
+            else
+                TraverseStmt(Node->getRetValue());
         }
         OS << ";";
         //if (Policy.IncludeNewlines) OS << "\n";
@@ -1208,7 +1214,13 @@ public:
         }
         else
         {
-            TraverseStmt(Node->getRHS());
+            if ((Node->getRHS()->getType()->isIntegralOrEnumerationType() && Node->getLHS()->getType()->isIntegralOrEnumerationType())
+                && needsNarrowCast(Node->getLHS(), Node->getRHS()))
+            {
+                writeNarrowCast(Node->getLHS()->getType(), Node->getRHS());
+            }
+            else
+                TraverseStmt(Node->getRHS());
         }
 
         return false;
@@ -1409,6 +1421,22 @@ public:
             isNullVal = intLiteral->EvaluateAsInt(res, *Context) && res.Val.getInt().isNullValue();
         #endif
         return isNullVal;
+    }
+
+    bool needsNarrowCast(Expr* lhs, Expr* rhs)
+    {
+        auto lhsTypeSize = Context->getTypeSizeInCharsIfKnown(lhs->getType());
+        auto rhsTypeSize = Context->getTypeSizeInCharsIfKnown(rhs->IgnoreImpCasts()->getType());
+        if (lhsTypeSize.hasValue() && rhsTypeSize.hasValue())
+            return lhsTypeSize.getValue() < rhsTypeSize.getValue();
+        return false;
+    }
+
+    void writeNarrowCast(QualType targetType, Expr* whatExpr)
+    {
+        OS << "cast(" << DlangBindGenerator::toDStyle(targetType) << ") ";
+        ParenExpr wrappedExpr(SourceLocation(), SourceLocation(), whatExpr);
+        TraverseStmt(&wrappedExpr);
     }
 
     bool HandlePotentialAssert(CStyleCastExpr* E)
