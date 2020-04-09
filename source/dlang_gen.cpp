@@ -2152,8 +2152,6 @@ void DlangBindGenerator::writeFnBody(clang::FunctionDecl* fn, bool commentOut)
 
     if (isa<CXXConstructorDecl>(fn))
     {
-        if (classOrStructName == "rcTempVector" && fn->getNumParams() > 1)
-            int x = 0;
         const auto ctdecl = cast<CXXConstructorDecl>(fn);
         hasInitializerList = ctdecl->getNumCtorInitializers() != 0
             && std::find_if( ctdecl->init_begin(), ctdecl->init_end(), 

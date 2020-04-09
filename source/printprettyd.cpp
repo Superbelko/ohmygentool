@@ -503,6 +503,17 @@ public:
         return false;
     }
 
+    bool isCtorInitNullValue(Expr* e)
+    {
+        auto plist = dyn_cast<ParenListExpr>(e);
+        if (plist->child_end() != plist->child_begin())
+        {
+            auto intliteral = dyn_cast<IntegerLiteral>(*plist->children().begin());
+            return isNullValue(intliteral);
+        }
+        return false;
+    }
+
     bool TraverseConstructorInitializer(CXXCtorInitializer *I)
     {
         isCtorInitializer = true;
@@ -515,7 +526,15 @@ public:
         //if (!builtin)
         //    OS << DlangBindGenerator::toDStyle(m->getType()) << "(";
 
-        TraverseStmt(I->getInit());
+        // special case for null assignment
+        if (m->getType()->isAnyPointerType() 
+            && I->getInit()->getStmtClass() == Stmt::ParenListExprClass 
+            && isCtorInitNullValue(I->getInit()))
+        {
+            OS << "null";
+        }
+        else
+            TraverseStmt(I->getInit());
 
         //if (!builtin)
         //    OS << ")";
@@ -793,7 +812,11 @@ public:
                 OS << "&";
             }
 
-            TraverseStmt(Call->getArg(i));
+            // replace NULL
+            if (fn && i < fn->param_size() && fn->parameters()[i]->getType()->isPointerType() && isNullValue(Call->getArg(i)->IgnoreImplicit()))
+                OS << "null";
+            else
+                TraverseStmt(Call->getArg(i));
 
             // add .byRef hack for temporary objects
             // HACK: this fails on variadic functions/ptr to functions in some cases, for now this second if just prevents crash
@@ -1172,14 +1195,7 @@ public:
         auto noImpCastsRHS = Node->getRHS()->IgnoreImpCasts();
         if (isPtr && isa<IntegerLiteral>(noImpCastsRHS))
         {
-            bool isNullVal;
-#if (LLVM_VERSION_MAJOR < 8)
-            llvm::APSInt res;
-            isNullVal = noImpCastsRHS->EvaluateAsInt(res, *Context) && res.isNullValue();
-#else
-            Expr::EvalResult res;
-            isNullVal = noImpCastsRHS->EvaluateAsInt(res, *Context) && res.Val.getInt().isNullValue();
-#endif
+            bool isNullVal = isNullValue(noImpCastsRHS);
             if (isNullVal)
             {
                 OS << "null";
@@ -1375,6 +1391,24 @@ public:
             break;
         }
         return true;
+    }
+
+    bool isNullValue(Expr* e)
+    {
+        bool isNullVal;
+        if (!e)
+            return false;
+        auto intLiteral = dyn_cast<IntegerLiteral>(e);
+        if (!intLiteral)
+            return false;
+        #if (LLVM_VERSION_MAJOR < 8)
+            llvm::APSInt res;
+            isNullVal = intLiteral->EvaluateAsInt(res, *Context) && res.isNullValue();
+        #else
+            Expr::EvalResult res;
+            isNullVal = intLiteral->EvaluateAsInt(res, *Context) && res.Val.getInt().isNullValue();
+        #endif
+        return isNullVal;
     }
 
     bool HandlePotentialAssert(CStyleCastExpr* E)
