@@ -739,10 +739,11 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
     
     const bool hasNamespace = decl->getDeclContext()->isNamespace();
     const auto externStr = externAsString(decl->getDeclContext()->isExternCContext());
+    const bool isClassMangle = (decl->isClass() && !isPossiblyVirtual(decl));
 
     // linkage & namespace
     if (!hasNamespace)
-        out << "extern(" << externStr << ")" << std::endl;
+        out << "extern(" << externStr << (isClassMangle ? ", class)" : ")") << std::endl;
     else
         nsPolicy->beginEntry(decl, externStr);
 
