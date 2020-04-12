@@ -2233,7 +2233,14 @@ void DlangBindGenerator::writeFnBody(clang::FunctionDecl* fn, bool commentOut)
                         //);
                         //auto baseidx = std::distance(cxxdecl->bases_begin(), found);
                         //out << "_b" << baseidx;
-                        if (ctdecl->isDefaultConstructor())
+                        auto iexpr = init->getInit()->IgnoreParens();
+                        bool isDefaultCtorCall = false;
+                        if (iexpr && isa<CXXConstructExpr>(iexpr))
+                        {
+                            if (auto ctinit = dyn_cast<CXXConstructExpr>(iexpr))
+                                isDefaultCtorCall = ctinit->getConstructor()->isDefaultConstructor();
+                        }
+                        if (init->isBaseInitializer() && isDefaultCtorCall)
                             out << "_b0._default_ctor";
                         else
                             out << "_b0.__ctor";
