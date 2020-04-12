@@ -946,11 +946,8 @@ void DlangBindGenerator::onEnum(const clang::EnumDecl *decl)
     bool hasName = !decl->getName().empty();
     if (hasName)
     {
-        // alias myEnum = int;
-        out << "alias " << decl->getName().str() << " = " << enumTypeString << ";" << std::endl;
-        // enum : myEnum
-        out << "enum "
-            << " : " << decl->getName().str() << std::endl;
+        // enum myEnum
+        out << "enum " << decl->getName().str() << std::endl;
     }
     else
     {
@@ -971,6 +968,19 @@ void DlangBindGenerator::onEnum(const clang::EnumDecl *decl)
 
     out << "}" << std::endl;
     out << std::endl;
+
+    // set up aliases to mimic C++ enum scope
+    if (!decl->isScoped() && hasName)
+    {
+        for (const auto e : decl->enumerators())
+        {
+            // alias ENUMERATOR = myEnum.ENUMERATOR;
+            out << "alias " << e->getName().str() 
+                << " = " << decl->getName().str() << "." << e->getNameAsString() << ";";
+            out << std::endl;
+        }
+        out << std::endl;
+    }
 }
 
 
