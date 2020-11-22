@@ -51,16 +51,16 @@ USE ON YOUR OWN RISK!
 * CMake (3.10+ on Windows)
 * D compiler (DMD or LDC2) with DUB build system (usually shipped with compiler)
 ##### Libraries
-* LLVM (7, 8, or 9)
-* Clang (7.0-9.0)
+* LLVM with Clang (versions 7.0-11.0)
 * RapidJSON
 
 *Clang 6 might work as well, but is not supported.
 
 ##### Instructions
-*Please note that building LLVM alone will take about 45 minutes on my machine, and over 1.5 hours with Clang*
+*Please note that building LLVM alone will take about 45 minutes on my machine (AMD FX-8350, 16GB, SATA-3 SSD), and over 1.5 hours with Clang*
 * Build LLVM with Clang
     * Set-up LLVM_DIR environment variable with _/path/to/your_llvm_build_
+    * Starting with LLVM 9 it is now also requires to be installed and LLVM_DIR set to /install_dir/lib/cmake/llvm which takes even more disk space, yay \0/
 * **OR** you can also try your OS package manager prebuilt binaries *(for example 'libclang-7-dev llvm-7-dev' packages on Ubuntu)*, this can save you hours of waiting and up to 40 GB of disk space
 * Copy RapidJSON *include* folder to gentool *include* folder
 * Build using CMake!
@@ -70,9 +70,9 @@ cd build
 cmake ../ -DCMAKE_GENERATOR_PLATFORM=x64 -DLLVM_DIR=/path/to/llvm/build
 cmake --build . --config Release
 ```
-*-DCMAKE_GENERATOR_PLATFORM=x64 here is not required, just shows how to quickly generate x64 on Windows*
+*`-DCMAKE_GENERATOR_PLATFORM=x64` here is not required, just shows how to quickly generate x64 on Windows*
 
-*-DGENTOOL_LIB=ON can be used to build library usable with D main executable, doing this will generate dubBuild.{sh|bat} file with set up paths and variables for building with dub*
+*`-DGENTOOL_LIB=ON` can be used to build library usable with D main executable, doing this will generate `dubBuild.{sh|bat}` file with set up paths and variables for **building with dub***
 
 **Linux note:**  
     It may fail to link due to lib order, in this case try using lld linker
