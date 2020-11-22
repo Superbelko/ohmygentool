@@ -39,7 +39,11 @@ Compiler* createCompiler(const char* file)
     TheCompInst->createASTContext();
 
     // Set the main file handled by the source manager to the input file.
+#if (LLVM_VERSION_MAJOR < 11)
     const clang::FileEntry *FileIn = FileMgr.getFile(file);
+#else
+    const clang::FileEntry *FileIn = FileMgr.getFile(file).get();
+#endif
     auto id = SourceMgr.getOrCreateFileID(FileIn, clang::SrcMgr::CharacteristicKind::C_User);
     SourceMgr.setMainFileID(id);
     TheCompInst->getDiagnosticClient().BeginSourceFile(

@@ -54,7 +54,7 @@ std::string wrapRefHelper(QualType T, VarDecl* D)
     // ret type
     os << DlangBindGenerator::toDStyle(T) << " ";
     // variable name
-    os << DlangBindGenerator::sanitizedIdentifier(D->getName()) << "() { return ";
+    os << DlangBindGenerator::sanitizedIdentifier( std::string(D->getName())) << "() { return ";
     // helper function body
     printPrettyD(D->getInit(), os, nullptr, *DlangBindGenerator::g_printPolicy);
     os << "; }";
@@ -185,7 +185,7 @@ public:
         }
         //printDeclType(T, D->getName());
         auto typeString = DlangBindGenerator::toDStyle(T);
-        OS << typeString << " " << DlangBindGenerator::sanitizedIdentifier(D->getName());
+        OS << typeString << " " << DlangBindGenerator::sanitizedIdentifier( std::string(D->getName()));
         Expr *Init = D->getInit();
         if (!Policy.SuppressInitializers && Init)
         {
@@ -835,7 +835,7 @@ public:
                     if (auto recordDecl = Call->getArg(i)->getType()->getAsRecordDecl())
                     {
                     Feedback->addAction(
-                        std::move(std::make_unique<AddRvalueHackAction>(recordDecl->getName()))
+                        std::move(std::make_unique<AddRvalueHackAction>( std::string(recordDecl->getName())))
                         );
                     }
                 }

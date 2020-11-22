@@ -413,12 +413,35 @@ std::string getMangledName(const Decl* decl, MangleContext* ctx)
 {
     std::string mangledName;
     llvm::raw_string_ostream ostream(mangledName);
-    if (isa<CXXConstructorDecl>(decl))
-        ctx->mangleCXXCtor(cast<CXXConstructorDecl>(decl), CXXCtorType::Ctor_Complete, ostream);
-    else if (isa<CXXDestructorDecl>(decl))
-        ctx->mangleCXXDtor(cast<CXXDestructorDecl>(decl), CXXDtorType::Dtor_Complete, ostream);
+#if (LLVM_VERSION_MAJOR >= 11)
+    GlobalDecl GD;
+#endif
+
+    if (const CXXConstructorDecl *ctorDecl = dyn_cast<CXXConstructorDecl>(decl))
+      #if (LLVM_VERSION_MAJOR < 11)
+        ctx->mangleCXXCtor(ctorDecl, CXXCtorType::Ctor_Complete, ostream);
+      #else
+        GD = GlobalDecl(ctorDecl, CXXCtorType::Ctor_Complete);
+      #endif
+
+    else if (const CXXDestructorDecl *dtorDecl = dyn_cast<CXXDestructorDecl>(decl))
+      #if (LLVM_VERSION_MAJOR < 11)
+        ctx->mangleCXXDtor(dtorDecl, CXXDtorType::Dtor_Complete, ostream);
+      #else
+        GD = GlobalDecl(dtorDecl, CXXDtorType::Dtor_Complete);
+      #endif
+
     else if (isa<FunctionDecl>(decl))
+      #if (LLVM_VERSION_MAJOR < 11)
         ctx->mangleName(cast<FunctionDecl>(decl), ostream);
+      #else
+        GD = GlobalDecl(cast<FunctionDecl>(decl));
+      #endif
+
+#if (LLVM_VERSION_MAJOR >= 11)
+    ctx->mangleName(GD, ostream);
+#endif
+    
     return ostream.str();
 }
 
@@ -432,7 +455,7 @@ std::string macroToString(const clang::MacroInfo* macro)
     {
         if (tok.isAnyIdentifier())
         {
-            os << DlangBindGenerator::sanitizedIdentifier(tok.getIdentifierInfo()->getName());
+            os << DlangBindGenerator::sanitizedIdentifier( std::string(tok.getIdentifierInfo()->getName()));
         }
         else if (tok.isLiteral())
         {
@@ -2013,7 +2036,7 @@ void DlangBindGenerator::writeFnRuntimeArgs(const clang::FunctionDecl* fn)
                 
                 if (auto rec = defaultVal->getType()->getAsRecordDecl(); rec && rec->getIdentifier())
                     feedback->addAction(
-                        std::move(std::make_unique<AddRvalueHackAction>(rec->getName()))
+                        std::move(std::make_unique<AddRvalueHackAction>(std::string(rec->getName())))
                     );
                 // TODO: skip on function calls
                 out << ".byRef ";

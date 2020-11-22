@@ -234,7 +234,7 @@ namespace fs = std::experimental::filesystem;
         if (path.empty()) { // second attempt with different approach
             auto sfile = SM.getFileID(entry->getLocation());
             auto* f = SM.getFileEntryForID(sfile);
-            if (f) path = f->getName();
+            if (f) path = std::string(f->getName());
         }
         if (path.empty())
             llvm::errs() << "addType() error: empty path for entry '" << entry->getName() << "'\n";

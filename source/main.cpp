@@ -169,7 +169,7 @@ std::string getPathForDecl(const Decl* decl, SourceManager& srcMgr)
 	auto sfile = srcMgr.getFileID(decl->getLocation());
 	auto* f = srcMgr.getFileEntryForID(sfile);
 	if (f)
-		path = f->getName();
+		path = std::string(f->getName());
 	else { 
 		std::string s;
 		llvm::raw_string_ostream os(s);
@@ -490,7 +490,11 @@ std::tuple<int, bool> initGlobalLangOptions(gentool::InputOptions& input)
 	langOptions.CPlusPlus11 = isCpp && standardVersion >= 11;
 	langOptions.CPlusPlus14 = isCpp && standardVersion >= 14;
 	langOptions.CPlusPlus17 = isCpp && standardVersion >= 17;
-	langOptions.CPlusPlus2a = isCpp && standardVersion >= 18; // TODO: actual repr for this
+#if (LLVM_VERSION_MAJOR < 11)
+	langOptions.CPlusPlus2a = isCpp && standardVersion >= 20;
+#else
+	langOptions.CPlusPlus20 = isCpp && standardVersion >= 20;
+#endif
 	langOptions.Bool = 1;
 	langOptions.RTTI = 0;
 	langOptions.DoubleSquareBracketAttributes = 1;
@@ -601,7 +605,7 @@ public:
 	{
 		auto& PP = CI.getPreprocessor();
 		// PP takes ownership.
-		PP.addPPCallbacks(llvm::make_unique<PPCallbacksTracker>(PP, Listener));
+		PP.addPPCallbacks(std::make_unique<PPCallbacksTracker>(PP, Listener));
 	}
 
 	void HandleTranslationUnit(ASTContext &Ctx) 
@@ -628,7 +632,7 @@ protected:
 	CreateASTConsumer(CompilerInstance &CI, StringRef InFile) override
 	{
 		Listener->setSourceManager(&CI.getSourceManager());
-		return llvm::make_unique<GentoolASTConsumer>(CI, Listener);
+		return std::make_unique<GentoolASTConsumer>(CI, Listener);
 	}
 private:
 	DlangBindGenerator* Listener;
@@ -639,10 +643,18 @@ class GentoolFrontendActionFactory : public FrontendActionFactory
 public:
 	GentoolFrontendActionFactory(DlangBindGenerator* Listener) : Listener(Listener) {}
 
+#if (LLVM_VERSION_MAJOR < 11)
 	GentoolGenAction *create() override
 	{
 		return new GentoolGenAction(Listener);
 	}
+#else
+	std::unique_ptr<FrontendAction> create() override
+	{
+		return std::make_unique<GentoolGenAction>(Listener);
+	}
+#endif
+
 private:
 	DlangBindGenerator* Listener;
 };
