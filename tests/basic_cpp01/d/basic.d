@@ -74,3 +74,12 @@ unittest
 	destroy(d);
 	assert(d.getVal() == 0);
 }
+
+unittest
+{
+	TestStructThis s;
+	s.reset();
+	assert(s.a == 42 && s.b == 1.5 && s.c == 'a', "incorrect values");
+	s.zero();
+	assert(s.a == 0 && s.b == 0 && s.c == 0, "struct must be zero'ed");
+}

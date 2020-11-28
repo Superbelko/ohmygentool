@@ -811,9 +811,8 @@ public:
             if (i) { OS << ", "; }
             
             // pass 'this' for struct pointer by ref
-            if (Call->getArg(i)->getStmtClass() == Stmt::CXXThisExprClass
-                && Call->getArg(i)->getType()->isPointerType() 
-                && !isPossiblyVirtual(fn->parameters()[i]->getType()->getAsRecordDecl()))
+            if (Call->getArg(i)->IgnoreImpCasts()->getStmtClass() == Stmt::CXXThisExprClass 
+                && needsAddressForThis(Call->getArg(i)->getType(), fn->parameters()[i]->getType()))
             {
                 OS << "&";
             }
@@ -843,6 +842,15 @@ public:
         }
     }
 
+    // helper for CallExpr, tests whether reference for 'this' is needed or not
+    bool needsAddressForThis(const QualType& arg, const QualType& fnCallType) {
+        if (arg->isPointerType() && !isPossiblyVirtual(arg->getAsRecordDecl()))
+            return true;
+        // WTF: is this even possible for 'this'?
+        if (!arg->isPointerType() && fnCallType->isPointerType())
+            return true;
+        return false;
+    }
 
     void PrintCallExpr(CallExpr *Call)
     {

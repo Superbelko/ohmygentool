@@ -1,4 +1,5 @@
 #pragma once
+#include <memory>
 
 // Implements series of functions with following conventions
 // int = -42
@@ -38,6 +39,18 @@ protected:
     virtual void setVal(int val) override;
 private:
     float a;
+};
+
+
+// Extra struct with memset in body (test if non-virtual struct has correct 'this' pointer)
+
+struct TestStructThis {
+public:
+    int a;
+    float b;
+    char c;
+    inline void reset() { a = 42; b = 1.5; c = 'a'; }
+    inline void zero() { memset(this, 0, sizeof(TestStructThis)); }
 };
 
 
