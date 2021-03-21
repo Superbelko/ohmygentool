@@ -126,6 +126,7 @@ else()
     )
 endif()
 
+# Extra step when using D main(), write build script with configured environment
 if (GENTOOL_LIB)
     set(DUMP_LIBS_FILENAME "${CMAKE_CACHEFILE_DIR}/linklibs.txt")
 
@@ -133,19 +134,9 @@ if (GENTOOL_LIB)
     message(STATUS "Writing libs file ${DUMP_LIBS_FILENAME}")
     file(WRITE "${DUMP_LIBS_FILENAME}" "${libs_list}")
 
-    message(STATUS "Generating build scripts")
-    set(DUB_RUN_SCRIPT dub run "-q" "--single" "${CMAKE_CURRENT_SOURCE_DIR}/scripts/makeenv.d" "--" ${DUMP_LIBS_FILENAME} ${CMAKE_CURRENT_SOURCE_DIR} ${LLVM_DIR})
-    execute_process(COMMAND ${DUB_RUN_SCRIPT}
-                    RESULT_VARIABLE makeenv_status
-                    OUTPUT_VARIABLE makeenv_report
-                    ERROR_VARIABLE makeenv_except
+    add_custom_command(
+        TARGET gentool POST_BUILD
+        COMMAND dub run -q --single "${CMAKE_CURRENT_SOURCE_DIR}/scripts/makeenv.d" -- ${DUMP_LIBS_FILENAME} ${CMAKE_CURRENT_SOURCE_DIR} ${LLVM_DIR} "$<CONFIG>"
+        VERBATIM
     )
-    #message(STATUS "status ${makeenv_status}")
-    #message(STATUS "report ${makeenv_report}")
-    #message(STATUS "except ${makeenv_except}")
-    if (makeenv_status STREQUAL 0)
-        message(STATUS "${makeenv_report}")
-    else()
-        message(SEND_ERROR "${makeenv_except}")
-    endif()
 endif()

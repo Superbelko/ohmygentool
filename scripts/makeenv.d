@@ -13,10 +13,11 @@ int main(string[] args)
     auto libListPath = args[1];
     auto targetPath = args[2];
     auto llvmDir = args[3];
+    auto buildType = args[4];
 
     const command = readText(libListPath)
         .parseList()
-        .makeEnv(llvmDir);
+        .makeEnv(llvmDir, buildType);
 
     targetPath.scriptFile.write(command);
 
@@ -48,10 +49,10 @@ string[] parseList(string rawList)
         .array();
 }
 
-string makeEnv(string[] libs, string llvmDir = null)
+string makeEnv(string[] libs, string llvmDir = null, string buildType = null)
 {
     import std.conv : text;
-    import std.algorithm : map, joiner;
+    import std.algorithm : map, joiner, canFind;
     import std.format : format;
     import std.path : buildNormalizedPath, dirSeparator;
 
@@ -70,11 +71,13 @@ string makeEnv(string[] libs, string llvmDir = null)
         llvmDir = buildNormalizedPath(llvmDir, "..");
     }
 
+    string dubBuildType = buildType.canFind("Debug") ? "debug" : "release";
+
     // windows linker flags is for LDC2, for DMD you'll need to prepend it with -L
     version(Windows)
-    return "set LFLAGS=%s\nset LIB=%s;build\\Release\ndub build --build=release"
-        .format(llvmDir~dirSeparator~"*.lib", llvmDir);
+    return "set LFLAGS=%s\nset LIB=%s;build\\%s\ndub build --build=%s"
+        .format(llvmDir~dirSeparator~"*.lib", llvmDir, buildType, dubBuildType);
     else
-    return "export LFLAGS=\"%s\"\nexport LIBRARY_PATH=%s\ndub build --build=release"
-        .format(res, llvmDir);
+    return "export LFLAGS=\"%s\"\nexport LIBRARY_PATH=%s\ndub build --build=%s"
+        .format(res, llvmDir, dubBuildType);
 }
