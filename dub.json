@@ -4,21 +4,27 @@
 	"authors": [
 		"Superbelko"
 	],
-	"copyright": "Copyright © 2019, Superbelko",
+	"copyright": "Copyright © 2019-2021, Superbelko",
 	"name": "gentool",
 	"targetType": "executable",
-	"lflags": [ "\" $LFLAGS -L\"" ],
-	"lflags-posix": ["-Lbuild"],
-	"lflags-windows": ["/LIBPATH:build", "/NODEFAULTLIB:MSVCRT", "/NODEFAULTLIB:libucrt" ],
-	"lflags-windows-debug": ["/NODEFAULTLIB:MSVCRT", "/NODEFAULTLIB:ucrt", "/NODEFAULTLIB:libcmt"],
+	"lflags-posix": ["-Lbuild", "$CLANGLIBS"],
+	"lflags-windows": ["$LFLAGS", "/LIBPATH:build", "/NODEFAULTLIB:MSVCRT", "/NODEFAULTLIB:libucrt" ],
 	"libs-posix": [ 
 		"stdc++", 
 		"stdc++fs",
 		"tinfo"
 	],
 	"libs-windows": [
-		"version", "ucrt"
+		"version"
 	],
+	"buildTypes": {
+		"debug": {
+			"libs": [ "ucrtd" ]
+		},
+		"release": {
+			"libs": [ "ucrt" ]
+		}
+	},
 	"targetPath": "build",
 	"dependencies": { 
 		"vibe-d:data": "~>0.8.5-rc.1"

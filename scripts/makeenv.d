@@ -56,10 +56,19 @@ string makeEnv(string[] libs, string llvmDir = null, string buildType = null)
     import std.format : format;
     import std.path : buildNormalizedPath, dirSeparator;
 
-    auto res = libs
-        .map!(s => "-L-l" ~ s)
-        .joiner(" ")
-        .text;
+    version(Windows)
+        string itemSeparator = " " ;
+    else
+        string itemSeparator = `\" \"`; // hack for dumb tools
+
+    version(Posix)
+    {
+        auto clangLibs = libs[1..$]
+            .map!(s => "-L-l" ~ s)
+            .joiner(itemSeparator)
+            .text;
+        res = "-l" ~ libs[0] ~ itemSeparator ~ res;
+    }
 
     // folder that contains llvm cmake config (e.g. ~/llvm-build/lib/cmake/llvm)
     // we are interested in static libraries files location
@@ -67,17 +76,17 @@ string makeEnv(string[] libs, string llvmDir = null, string buildType = null)
     {
         version(Windows)
         llvmDir = buildNormalizedPath(llvmDir, "..", "..");
-        else // For some reason on Linux it is one level above
-        llvmDir = buildNormalizedPath(llvmDir, "..");
+        else // For some reason on Linux it is one level above, lib is for ubuntu package
+        llvmDir = buildNormalizedPath(llvmDir, "..", "lib");
     }
 
     string dubBuildType = buildType.canFind("Debug") ? "debug" : "release";
 
     // windows linker flags is for LDC2, for DMD you'll need to prepend it with -L
     version(Windows)
-    return "set LFLAGS=%s\nset LIB=%s;build\\%s\ndub build --build=%s"
-        .format(llvmDir~dirSeparator~"*.lib", llvmDir, buildType, dubBuildType);
+    return "set LFLAGS=%s\nset LIB=%s;build\\%s\ndub build --build=%s %s"
+        .format(llvmDir~dirSeparator~"*.lib", llvmDir, buildType, dubBuildType, "%*");
     else
-    return "export LFLAGS=\"%s\"\nexport LIBRARY_PATH=%s\ndub build --build=%s"
-        .format(res, llvmDir, dubBuildType);
+    return "export CLANGLIBS=\"%s\"\nexport LIBRARY_PATH=%s\ndub build --build=%s \"$@\""
+        .format(clangLibs, llvmDir, dubBuildType);
 }
