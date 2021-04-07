@@ -128,7 +128,7 @@ endif()
 
 # Extra step when using D main(), write build script with configured environment
 if (GENTOOL_LIB)
-    set(DUMP_LIBS_FILENAME "${CMAKE_CACHEFILE_DIR}/linklibs.txt")
+    set(DUMP_LIBS_FILENAME "${CMAKE_BINARY_DIR}/linklibs.txt")
 
     get_target_property(libs_list gentool LINK_LIBRARIES)
     message(STATUS "Writing libs file ${DUMP_LIBS_FILENAME}")

@@ -67,7 +67,7 @@ string makeEnv(string[] libs, string llvmDir = null, string buildType = null)
             .map!(s => "-L-l" ~ s)
             .joiner(itemSeparator)
             .text;
-        res = "-l" ~ libs[0] ~ itemSeparator ~ res;
+        clangLibs = "-l" ~ libs[0] ~ itemSeparator ~ clangLibs;
     }
 
     // folder that contains llvm cmake config (e.g. ~/llvm-build/lib/cmake/llvm)
