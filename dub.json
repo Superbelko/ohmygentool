@@ -7,6 +7,7 @@
 	"copyright": "Copyright © 2019-2021, Superbelko",
 	"name": "gentool",
 	"targetType": "executable",
+	"dflags-posix-ldc": ["--linker="],
 	"lflags-posix": ["-Lbuild", "$CLANGLIBS"],
 	"lflags-windows": ["$LFLAGS", "/LIBPATH:build", "/NODEFAULTLIB:MSVCRT", "/NODEFAULTLIB:libucrt" ],
 	"libs-posix": [ 
@@ -19,10 +20,10 @@
 	],
 	"buildTypes": {
 		"debug": {
-			"libs": [ "ucrtd" ]
+			"libs-windows": [ "ucrtd" ]
 		},
 		"release": {
-			"libs": [ "ucrt" ]
+			"libs-windows": [ "ucrt" ]
 		}
 	},
 	"targetPath": "build",

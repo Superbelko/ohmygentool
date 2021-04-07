@@ -74,10 +74,7 @@ string makeEnv(string[] libs, string llvmDir = null, string buildType = null)
     // we are interested in static libraries files location
     if (llvmDir)
     {
-        version(Windows)
         llvmDir = buildNormalizedPath(llvmDir, "..", "..");
-        else // For some reason on Linux it is one level above, lib is for ubuntu package
-        llvmDir = buildNormalizedPath(llvmDir, "..", "lib");
     }
 
     string dubBuildType = buildType.canFind("Debug") ? "debug" : "release";
