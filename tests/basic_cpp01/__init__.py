@@ -11,6 +11,7 @@ def run():
     test_name = 'basic'
     config = 'Release'
     libExt = helpers.static_lib_extensions()
+    dc = helpers.detect_compiler()
     extra_args = list()
     helpers.setup_args(extra_args, config=config)
     if (helpers.is_windows()):
@@ -38,7 +39,7 @@ def run():
             except subprocess.CalledProcessError:
                 raise ValueError("Binding generation failed")
             try:
-                subprocess.run(f'dmd ../d/{test_name}.d generated.d {" ".join(extra_args)} -unittest -main -g'.split(), check=True)
+                subprocess.run(f'{dc} ../d/{test_name}.d generated.d {" ".join(extra_args)} -unittest -main -g'.split(), check=True)
             except subprocess.CalledProcessError:
                 raise ValueError("D compilation error")
             subprocess.run(f'./{test_name}', check=True)

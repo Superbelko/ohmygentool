@@ -45,6 +45,7 @@ def run_tests(tests):
             tests_ok = False
     if not tests_ok:
         print('Some tests not passed')
+        exit(1)
     else:
         print('All tests are OK')
 
