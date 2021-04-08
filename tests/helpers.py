@@ -20,11 +20,11 @@ def detect_compiler():
     executable = os.environ.get('DC')
     if not executable:
         try:
-            proc = subprocess.run(f'ldc2 --version', check=True, stdout=subprocess.PIPE)
+            proc = subprocess.run(f'ldc2 --version'.split(), check=True, stdout=subprocess.PIPE)
             if proc is not None:
                 executable = 'ldc2'
             else:
-                proc = subprocess.run(f'dmd --version', check=True, stdout=subprocess.PIPE)
+                proc = subprocess.run(f'dmd --version'.split(), check=True, stdout=subprocess.PIPE)
                 if proc is not None:
                     executable = 'dmd'
         except FileNotFoundError as e:
@@ -32,7 +32,7 @@ def detect_compiler():
              'in PATH or specify it with DC environment variable'))
     else:
         try:
-            proc = subprocess.run(f'{executable} --version', check=True, stdout=subprocess.PIPE)
+            proc = subprocess.run(f'{executable} --version'.split(), check=True, stdout=subprocess.PIPE)
         except FileNotFoundError as e:
             raise Exception('Unable to get DC, invalid path')
     return executable
