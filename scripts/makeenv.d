@@ -81,7 +81,7 @@ string makeEnv(string[] libs, string llvmDir = null, string buildType = null)
 
     // windows linker flags is for LDC2, for DMD you'll need to prepend it with -L
     version(Windows)
-    return "set LFLAGS=%s\nset LIB=%s;build\\%s\ndub build --build=%s %s"
+    return "set CLANGLIBS=%s\nset LIB=%s;build\\%s\ndub build --build=%s %s"
         .format(llvmDir~dirSeparator~"*.lib", llvmDir, buildType, dubBuildType, "%*");
     else
     return "export CLANGLIBS=\"%s\"\nexport LIBRARY_PATH=%s\ndub build --build=%s \"$@\""

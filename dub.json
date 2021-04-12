@@ -9,7 +9,8 @@
 	"targetType": "executable",
 	"dflags-posix-ldc": ["--linker="],
 	"lflags-posix": ["-Lbuild", "$CLANGLIBS"],
-	"lflags-windows": ["$LFLAGS", "/LIBPATH:build", "/NODEFAULTLIB:MSVCRT", "/NODEFAULTLIB:libucrt" ],
+	"lflags-windows": ["/LIBPATH:build", "/NODEFAULTLIB:MSVCRT", "/NODEFAULTLIB:libucrt", "$CLANGLIBS" ],
+	"dflags-windows-ldc": ["-gc"],
 	"libs-posix": [ 
 		"stdc++", 
 		"stdc++fs",
@@ -20,6 +21,7 @@
 	],
 	"buildTypes": {
 		"debug": {
+			"lflags-windows": ["/NODEFAULTLIB:MSVCRTD"],
 			"libs-windows": [ "ucrtd" ]
 		},
 		"release": {
