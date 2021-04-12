@@ -812,7 +812,7 @@ public:
             
             // pass 'this' for struct pointer by ref
             if (Call->getArg(i)->IgnoreImpCasts()->getStmtClass() == Stmt::CXXThisExprClass 
-                && needsAddressForThis(Call->getArg(i)->getType(), fn->parameters()[i]->getType()))
+                && fn && needsAddressForThis(Call->getArg(i)->getType(), fn->parameters()[i]->getType())) // check for fn, templates doesn't have it
             {
                 OS << "&";
             }
@@ -1433,6 +1433,8 @@ public:
 
     bool needsNarrowCast(Expr* lhs, Expr* rhs)
     {
+        if (lhs->getType() == rhs->getType())
+            return false;
         auto lhsTypeSize = Context->getTypeSizeInCharsIfKnown(lhs->getType());
         auto rhsTypeSize = Context->getTypeSizeInCharsIfKnown(rhs->IgnoreImpCasts()->getType());
         if (lhsTypeSize.hasValue() && rhsTypeSize.hasValue())

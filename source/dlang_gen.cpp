@@ -2268,6 +2268,14 @@ void DlangBindGenerator::writeFnBody(clang::FunctionDecl* fn, bool commentOut)
                         else
                             out << "_b0.__ctor";
                     }
+                    else if (init->getBaseClass()->getTypeClass() == Type::TemplateTypeParm)
+                    {
+                        auto* t = dyn_cast<TemplateTypeParmType>(init->getBaseClass());
+                        if (t && t->getIdentifier())
+                            out << t->getIdentifier()->getName().str();
+                        else
+                            out << "/*not yet implemented*/";
+                    }
                     else
                         out << init->getBaseClass()->getAsCXXRecordDecl()->getName().str();
                 }
