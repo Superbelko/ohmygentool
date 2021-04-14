@@ -959,7 +959,7 @@ void DlangBindGenerator::onEnum(const clang::EnumDecl *decl)
     if (auto td = decl->getTypedefNameForAnonDecl())
     {
         addType(cast<TypedefDecl>(td), storedTypes);
-        if (td->getUnderlyingType().getTypePtr() != decl->getTypeForDecl())
+        if (cppIsDefault && td->getUnderlyingType().getTypePtr() != decl->getTypeForDecl())
         {
             enumTypeString = toDStyle(td->getUnderlyingType());
             out << "alias " << enumTypeString << " = " << toDStyle(decl->getIntegerType()) << ";" << std::endl;
@@ -1105,6 +1105,18 @@ void DlangBindGenerator::onTypedef(const clang::TypedefDecl *decl)
             }
             else if (rd->getNameAsString() == typedefName)
                 return;
+        }
+
+        // write enum but don't write alias for typedef
+        if (auto td = tdtype->getAsTagDecl())
+        {
+            if (auto enumdecl = dyn_cast<EnumDecl>(td))
+            {
+                if (!cppIsDefault) {
+                    onEnum(enumdecl);
+                    return;
+                }
+            }
         }
     }
 
