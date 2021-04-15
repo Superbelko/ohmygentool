@@ -1,5 +1,6 @@
 #pragma once
 #include <memory>
+#include <cstring>
 
 // Implements series of functions with following conventions
 // int = -42
