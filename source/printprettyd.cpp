@@ -1223,7 +1223,8 @@ public:
         else
         {
             if ((Node->getRHS()->getType()->isIntegralOrEnumerationType() && Node->getLHS()->getType()->isIntegralOrEnumerationType())
-                && needsNarrowCast(Node->getLHS(), Node->getRHS()))
+                && !isa<IntegerLiteral>(noImpCastsRHS)
+                && needsNarrowCast(Node->getLHS()->IgnoreImpCasts(), Node->getRHS()->IgnoreImpCasts()))
             {
                 writeNarrowCast(Node->getLHS()->getType(), Node->getRHS());
             }
