@@ -332,7 +332,10 @@ bool overridesBaseOf(const FunctionDecl* fn, const CXXRecordDecl* rec)
             return true;
         return std::equal(a->param_begin(), a->param_end(), b->param_begin(), b->param_end(), 
             [](const ParmVarDecl* p1, const ParmVarDecl* p2) {
-                return p1->getType() == p2->getType() || p1->getNameAsString() == p2->getNameAsString();
+                // return true if TYPES does MATCH, OR if their NAMES are EQUAL (but only if present)
+                return p1->getType() == p2->getType() 
+                || (!p1->getName().empty() && !p2->getName().empty() 
+                    && (p1->getName() == p2->getName()));
         });
     };
     if (rec && rec->getDefinition())
