@@ -448,6 +448,34 @@ std::string getMangledName(const Decl* decl, MangleContext* ctx)
     return ostream.str();
 }
 
+// Chooses wysiwyg string delimiter depending on macro content
+char macroWysiwygDelimiter(const clang::MacroInfo* macro)
+{
+    if (!macro)
+        return '`';
+    
+    auto hasCharacter = [macro] (char delim) -> bool {
+        for (auto tok : macro->tokens())
+        {
+            if (tok.isLiteral())
+            {
+                auto literal = std::string_view(tok.getLiteralData(), tok.getLength());
+                if (literal.find_first_of(delim, 0) != std::string_view::npos)
+                    return true;
+            }
+        }
+        return false;
+    };
+
+    // delimiters to choose from
+    std::string delims = "`$%^#&/";
+
+    auto delim = std::find_if_not(delims.begin(), delims.end(), hasCharacter);
+    if (delim != delims.end())
+        return *delim;
+
+    return '`';
+}
 
 std::string macroToString(const clang::MacroInfo* macro)
 {
@@ -649,7 +677,8 @@ void DlangBindGenerator::finalize()
 void DlangBindGenerator::onMacroDefine(const clang::Token* name, const clang::MacroDirective* macro)
 {
     static const int LONG_MACRO_NUM_TOKENS = 120;
-    auto formatMacroOpen = [] (const clang::MacroInfo* mi, const llvm::StringRef macroName) {
+    char wysiwygDelim = macroWysiwygDelimiter(macro->getMacroInfo());
+    auto formatMacroOpen = [wysiwygDelim] (const clang::MacroInfo* mi, const llvm::StringRef macroName) {
         std::string s;
         llvm::raw_string_ostream os(s);
         os << "enum " << macroName;
@@ -664,14 +693,24 @@ void DlangBindGenerator::onMacroDefine(const clang::Token* name, const clang::Ma
             os << ")";
         os << " = ";
         if (mi->getNumParams() || !isPrimitiveMacro(mi))
-            os << "`";
+        {
+            // write opening for wysiwyg string long form
+            if (wysiwygDelim != '`')
+                os << "q\"";
+            os << wysiwygDelim;
+        }
         return os.str();
     };
-    auto formatMacroClose = [] (const clang::MacroInfo* mi) {
+    auto formatMacroClose = [wysiwygDelim] (const clang::MacroInfo* mi) {
         std::string s;
         llvm::raw_string_ostream os(s);
         if (mi->getNumParams() || !isPrimitiveMacro(mi))
-            os << "`";
+        {
+            os << wysiwygDelim;
+            // write closing for wysiwyg string long form
+            if (wysiwygDelim != '`')
+                os << '"';
+        }
         os << ";";
         return os.str();
     };
