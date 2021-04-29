@@ -369,26 +369,33 @@ bool overridesBaseOf(const FunctionDecl* fn, const CXXRecordDecl* rec)
     return false;
 }
 
+// In D classes are reference types, 
+// to make it D way it needs one level of indirection stripped.
+// NOTE: type parameter internally is a reference and will be modified
+bool isClassPointer(clang::QualType type)
+{
+    while (type->isPointerType())
+    {
+        type = type->getPointeeType();
+        if (type->isClassType() 
+            && type->isRecordType() 
+            && isPossiblyVirtual(type->getAsRecordDecl()))
+        {
+            return true;
+        }
+    }
+    return false;
+}
 
 clang::QualType adjustForVariable(clang::QualType ty, clang::ASTContext* ctx)
 {
-    bool isVirtual = isPossiblyVirtual(ty->getAsRecordDecl());
-    if (isVirtual)
+    if (ty->isReferenceType() && ctx)
     {
-        // Class in D is reference type, so remove first pointer
-        if (ty->isPointerType() || ty->isReferenceType())
-            return ty->getPointeeType();
-    }
-    else
-    {
-        if (ty->isReferenceType() && ctx)
-        {
-            // Convert non-class refs to pointers
-            // NOTE: this won't affect sizeof attribute,
-            //  in some cases (GNU GCC?) it might differ from actual memory layout
-            auto newtype = ctx->getPointerType(ty->getPointeeType());
-            return newtype;
-        }
+        // Convert non-class refs to pointers
+        // NOTE: this won't affect sizeof attribute,
+        //  in some cases (GNU GCC?) it might differ from actual memory layout
+        auto newtype = ctx->getPointerType(ty->getPointeeType());
+        return newtype;
     }
     return ty;
 }
@@ -1081,7 +1088,9 @@ void DlangBindGenerator::onFunction(const clang::FunctionDecl *decl)
 
     // ret type
     {
-        const auto typeStr = toDStyle(fn->getReturnType());
+        bool shouldStripIndirection = isClassPointer(fn->getReturnType());
+        auto adjustedType = shouldStripIndirection ? fn->getReturnType()->getPointeeType() : fn->getReturnType();
+        const auto typeStr = toDStyle(adjustedType);
         out << typeStr << " ";
     }
     // function name
@@ -1728,7 +1737,9 @@ void DlangBindGenerator::handleFields(const clang::RecordDecl *decl)
             }
         }
 
-        auto fieldTypeStr = toDStyle(adjustForVariable(it->getType(), &decl->getASTContext()));
+        bool shouldStripIndirection = isClassPointer(it->getType());
+        auto adjustedType = shouldStripIndirection ? it->getType()->getPointeeType() : it->getType();
+        auto fieldTypeStr = toDStyle(adjustForVariable(adjustedType, &decl->getASTContext()));
         if (!it->getIdentifier() && !bitfield)
         {
             constexpr const int ANON_PREFIX_LEN = 5;
@@ -1987,8 +1998,12 @@ void DlangBindGenerator::handleMethods(const clang::CXXRecordDecl *decl)
             out << "@disable ";
         }
 
-        if (hasRetType)
-            out << toDStyle(m->getReturnType()) << " ";
+        if (hasRetType) 
+        {
+            bool shouldStripIndirection = isClassPointer(m->getReturnType());
+            auto adjustedType = shouldStripIndirection ? m->getReturnType()->getPointeeType() : m->getReturnType();
+            out << toDStyle(adjustedType) << " ";
+        }
 
         if (isOperator || m->getIdentifier() == nullptr)
             out << funcName;
@@ -2057,7 +2072,9 @@ void DlangBindGenerator::writeFnRuntimeArgs(const clang::FunctionDecl* fn)
     bool noRefs = inlined && stripRefParam;
     for (const auto fp : fn->parameters())
     {
-        const auto typeStr = toDStyle(fp->getType());
+        bool shouldStripIndirection = isClassPointer(fp->getType());
+        auto adjustedType = shouldStripIndirection ? fp->getType()->getPointeeType() : fp->getType();
+        const auto typeStr = toDStyle(adjustedType);
         if (noRefs)
             out << stripRefFromParam(typeStr);
         else
