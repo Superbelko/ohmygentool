@@ -124,6 +124,10 @@ std::string merge(std::list<const clang::RecordDecl *> &q)
     return ss.str();
 }
 
+bool isReservedIdentifier(const std::string& id)
+{
+    return std::find(reservedIdentifiers.begin(), reservedIdentifiers.end(), id) != reservedIdentifiers.end();
+}
 
 // De-anonimize provided decl and all sub decls, will set generated identifier to the types
 void deanonimizeTypedef(clang::RecordDecl* decl, const std::string_view optName = std::string_view(), int* count = nullptr)
@@ -1078,7 +1082,7 @@ void DlangBindGenerator::onFunction(const clang::FunctionDecl *decl)
     // pragma mangle
     if (!fn->isTemplated())
     {
-        if (mangleAll && externStr == "C++")
+        if ((mangleAll && externStr == "C++") || isReservedIdentifier(fn->getName().str()))
         {
             clang::ASTContext& ast = fn->getASTContext();
             std::unique_ptr<MangleContext> mangleCtx = makeManglingContext(&ast);
@@ -1094,7 +1098,7 @@ void DlangBindGenerator::onFunction(const clang::FunctionDecl *decl)
         out << typeStr << " ";
     }
     // function name
-    out << fn->getName().str();
+    out << sanitizedIdentifier(fn->getName().str());
 
     if (fn->isTemplated())
     {
@@ -1529,7 +1533,7 @@ std::string DlangBindGenerator::_toDBuiltInType(QualType type)
 
 std::string DlangBindGenerator::sanitizedIdentifier(const std::string &id)
 {
-    if (std::find(reservedIdentifiers.begin(), reservedIdentifiers.end(), id) != reservedIdentifiers.end())
+    if (isReservedIdentifier(id))
         return std::string().append(id).append("_");
     else
         return id;
@@ -1917,6 +1921,8 @@ void DlangBindGenerator::handleMethods(const clang::CXXRecordDecl *decl)
             customMangle = customMangle_;
         }
 
+        if (m->getIdentifier() && isReservedIdentifier(m->getName().str()))
+            customMangle = true;
 
         bool possibleOverride = !(isCtor || isDtor) && (overridesBaseOf(m, decl) || (m->size_overridden_methods() > 0));
         bool cantOverride = possibleOverride && !(m->hasAttr<OverrideAttr>() || m->isVirtual());
@@ -2008,7 +2014,7 @@ void DlangBindGenerator::handleMethods(const clang::CXXRecordDecl *decl)
         if (isOperator || m->getIdentifier() == nullptr)
             out << funcName;
         else
-            out << m->getName().str();
+            out << sanitizedIdentifier(m->getName().str());
         
         // runtime args
         out << "(";
