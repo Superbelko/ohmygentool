@@ -13,7 +13,7 @@ import gentool.options;
 extern (C) int gentool_run(int compilerArgc, const(char*)* compilerArgv, CInputOptions inOpts, COutputOptions outOpts);
 
 immutable HELP_MESSAGE = 
-r"Oh My Gentool - v0.2.0
+r"Oh My Gentool - v0.3.0
 Generates D bindings from C/C++ code
 
 USAGE:
