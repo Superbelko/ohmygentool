@@ -2,6 +2,11 @@
 #include <memory>
 #include <cstring>
 
+// Tests delimiter picking
+// ISSUE #9 - pass macro + backtick leads to unescaped EOF error
+#define PASS(a) a
+#define NASTY PASS('`')
+
 // Implements series of functions with following conventions
 // int = -42
 // uint = 42

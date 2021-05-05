@@ -65,3 +65,17 @@ void TBase<T, dummy>::setVal(T value)
 {
     val = value;
 }
+
+// Anonymous struct using typedef
+typedef struct {
+    int a;
+    float b;
+    char c;
+} TypedefAnonStruct;
+
+// Named struct using typedef (different names)
+typedef struct TypedefStruct {
+    int a;
+    float b;
+    char c;
+} TypedefStruct_;
