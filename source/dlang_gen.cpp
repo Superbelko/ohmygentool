@@ -4,6 +4,7 @@
 #include <sstream>
 #include <iomanip>
 #include <memory>
+#include <unordered_set>
 
 #include "llvm/Config/llvm-config.h"
 #include "llvm/ADT/ScopeExit.h"
@@ -50,11 +51,88 @@ using namespace gentool;
 thread_local clang::PrintingPolicy *DlangBindGenerator::g_printPolicy;
 
 // D reserved keywords, possible overlaps from C/C++ sources
-std::vector<std::string> reservedIdentifiers = {
-    "align", "out", "ref", "version", "debug", "mixin", "with", "unittest", "typeof", "typeid", "super", "body",
-    "shared", "pure", "package", "module", "inout", "in", "is", "import", "invariant", "immutable", "interface",
-    "function", "delegate", "final", "export", "deprecated", "alias", "abstract", "synchronized",
-    "byte", "ubyte", "uint", "ushort", "string"
+// Taken from https://dlang.org/spec/lex.html#keywords
+std::unordered_set<std::string> reservedIdentifiers = {
+  "align", "out", "ref", "version", "debug", "mixin", "with", "unittest", "typeof", "typeid", "super", "body",
+  "shared", "pure", "package", "module", "inout", "in", "is", "import", "invariant", "immutable", "interface",
+  "function", "delegate", "final", "export", "deprecated", "alias", "abstract", "synchronized",
+  "byte", "ubyte", "uint", "ushort", "string",
+  // Unsure how to format these
+  "asm",
+  "assert",
+  "auto",
+  "bool",
+  "break",
+  "case",
+  "cast",
+  "catch",
+  "cdouble",
+  "cent",
+  "cfloat",
+  "char",
+  "class",
+  "const",
+  "continue",
+  "creal",
+  "dchar",
+  "default",
+  "delete",
+  "do",
+  "double",
+  "else",
+  "enum",
+  "extern",
+  "false",
+  "finally",
+  "float",
+  "for",
+  "foreach",
+  "foreach_reverse",
+  "goto",
+  "idouble",
+  "if",
+  "ifloat",
+  "int",
+  "ireal",
+  "lazy",
+  "long",
+  "macro",
+  "new",
+  "nothrow",
+  "null",
+  "override",
+  "pragma",
+  "private",
+  "protected",
+  "public",
+  "real",
+  "return",
+  "scope",
+  "short",
+  "static",
+  "struct",
+  "switch",
+  "template",
+  "this",
+  "throw",
+  "true",
+  "try",
+  "ucent",
+  "ulong",
+  "union",
+  "void",
+  "wchar",
+  "while",
+  "__FILE__",
+  "__FILE_FULL_PATH__",
+  "__MODULE__",
+  "__LINE__",
+  "__FUNCTION__",
+  "__PRETTY_FUNCTION__",
+  "__gshared",
+  "__traits",
+  "__vector",
+  "__parameters"
 };
 
 const char* MODULE_HEADER =
@@ -126,7 +204,8 @@ std::string merge(std::list<const clang::RecordDecl *> &q)
 
 bool isReservedIdentifier(const std::string& id)
 {
-    return std::find(reservedIdentifiers.begin(), reservedIdentifiers.end(), id) != reservedIdentifiers.end();
+    // Implicit conversion, 0 => false, +1 => true
+    return reservedIdentifiers.count(id);
 }
 
 // De-anonimize provided decl and all sub decls, will set generated identifier to the types
