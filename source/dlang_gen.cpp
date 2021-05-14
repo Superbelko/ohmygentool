@@ -1524,7 +1524,7 @@ std::string DlangBindGenerator::_toDBuiltInType(QualType type)
         return "ulong";
     case TY::LongLong:
         return "long";
-    case TY:LongDouble:
+    case TY::LongDouble:
         return "c_long_double";
     default:
         return type.getAsString(*DlangBindGenerator::g_printPolicy);
