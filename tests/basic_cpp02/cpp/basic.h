@@ -79,3 +79,77 @@ typedef struct TypedefStruct {
     float b;
     char c;
 } TypedefStruct_;
+
+
+
+// -------------------------------------------------
+// Templated base class & inheritance (ISSUE #15)
+// (constness stripped for simplicity, since we are dealing with classes IPtr takes references)
+
+template <class T>
+class IPtr {
+public:
+  int someInt() { return 1; }
+  inline IPtr();
+  inline IPtr (T ptr, bool addRef = true);
+  inline IPtr (/*const*/ IPtr& other) { ptr = other.ptr; }
+
+  inline T operator= (T ptr) { this->ptr = ptr; return ptr; }
+//protected:
+  T ptr; // T* ptr;
+};
+
+template<class T>
+inline IPtr<T>::IPtr() : ptr(0) 
+{
+}
+
+template<class T>
+inline IPtr<T>::IPtr(T ptr, bool addRef) : ptr(ptr) 
+{
+}
+
+class FUnknown
+{
+public:
+    inline virtual int get() { return 123; }
+    virtual ~FUnknown() = default;
+};
+
+template <class I>
+class FUnknownPtr : public IPtr<I> {
+public:
+  inline FUnknownPtr(FUnknown* unknown);
+  inline FUnknownPtr(/*const*/ FUnknownPtr &p) : IPtr<I>(p) {} // segfault #15
+  inline FUnknownPtr() {}
+
+  inline FUnknownPtr &operator=(/*const*/ FUnknownPtr &p) {
+    IPtr<I>::operator=(p);
+    return *this;
+  }
+  inline I operator=(FUnknown *unknown);
+  inline I getInterface() { return this->ptr; }
+};
+
+template <class I>
+inline FUnknownPtr<I>::FUnknownPtr (FUnknown* unknown)
+{
+	this->ptr = unknown;
+}
+
+template <class I>
+inline I FUnknownPtr<I>::operator= (FUnknown* unknown)
+{	
+    return IPtr<I>::operator= (unknown);
+	//return IPtr<I>::operator= (0);
+}
+
+
+class MyInt : public FUnknown
+{
+public:
+    int val;
+    virtual ~MyInt() {}
+};
+
+// -------------------------------------------------

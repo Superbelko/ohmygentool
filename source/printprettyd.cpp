@@ -1054,7 +1054,36 @@ public:
         //    Qualifier->print(OS, Policy);
         //if (Node->hasTemplateKeyword())
         //    OS << "template ";
-        OS << Node->getMemberNameInfo();
+
+        if (Node->isTypeDependent())
+        {
+            auto qual = Node->getQualifier();
+            if (qual && qual->getAsType())
+            {
+                OS << DlangBindGenerator::toDStyle(QualType(qual->getAsType(), 0));
+                OS << ".";
+            }
+        }
+
+
+        if (auto op = Node->getMemberNameInfo().getName().getCXXOverloadedOperator(); op != OO_None)
+        {
+            auto context = const_cast<ASTContext*>(Context);
+            const auto& p = context->getParentMapContext().getParents(*Node);
+            if (!p.empty())
+            {
+                if (auto call = p[0].get<CallExpr>())
+                {
+                    OS << DlangBindGenerator::getOperatorString(op, call->getNumArgs());
+                }
+                else
+                    OS << DlangBindGenerator::getOperatorString(op);
+            }
+            else
+                OS << DlangBindGenerator::getOperatorString(op);
+        }
+        else
+            OS << Node->getMemberNameInfo();
         if (Node->hasExplicitTemplateArgs())
             printDTemplateArgumentList(OS, Node->template_arguments(), Policy);
         return Node->isImplicitAccess();
@@ -1201,6 +1230,11 @@ public:
             isPtr = member->getType()->isPointerType();
         else if (auto declref = dyn_cast<DeclRefExpr>(Node->getLHS()))
             isPtr = declref->getType()->isPointerType();
+        else if (auto depScopeMember = dyn_cast<CXXDependentScopeMemberExpr>(Node->getLHS()))
+        {
+            auto baseTypePtr = depScopeMember->getBaseType().getTypePtr();
+            isPtr = depScopeMember->getType()->isPointerType() || (baseTypePtr && baseTypePtr->isPointerType());
+        }
 
         // outputs LHS 'op' RHS
         TraverseStmt(Node->getLHS());
