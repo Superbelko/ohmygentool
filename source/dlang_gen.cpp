@@ -2403,7 +2403,15 @@ void DlangBindGenerator::writeFnBody(clang::FunctionDecl* fn, bool commentOut)
                     out << "super";
                 else
                 {
-                    if (init->getBaseClass()->getTypeClass() == Type::Typedef)
+                    auto iexpr = init->getInit()->IgnoreParens();
+                    bool isDefaultCtorCall = false;
+                    if (iexpr && isa<CXXConstructExpr>(iexpr))
+                    {
+                        if (auto ctinit = dyn_cast<CXXConstructExpr>(iexpr))
+                            isDefaultCtorCall = ctinit->getConstructor()->isDefaultConstructor();
+                    }
+                    auto initBaseTypeClass = init->getBaseClass()->getTypeClass();
+                    if (initBaseTypeClass == Type::Typedef)
                     {
                         // FIXME: fix multiple inheritance, though it's not supported, not yet
                         // for this case (when we have non-virtual inheritance) find mixed-in index and call ctor on it
@@ -2414,25 +2422,55 @@ void DlangBindGenerator::writeFnBody(clang::FunctionDecl* fn, bool commentOut)
                         //);
                         //auto baseidx = std::distance(cxxdecl->bases_begin(), found);
                         //out << "_b" << baseidx;
-                        auto iexpr = init->getInit()->IgnoreParens();
-                        bool isDefaultCtorCall = false;
-                        if (iexpr && isa<CXXConstructExpr>(iexpr))
-                        {
-                            if (auto ctinit = dyn_cast<CXXConstructExpr>(iexpr))
-                                isDefaultCtorCall = ctinit->getConstructor()->isDefaultConstructor();
-                        }
+                        
                         if (init->isBaseInitializer() && isDefaultCtorCall)
                             out << "_b0._default_ctor";
                         else
                             out << "_b0.__ctor";
                     }
-                    else if (init->getBaseClass()->getTypeClass() == Type::TemplateTypeParm)
+                    else if (initBaseTypeClass == Type::TemplateTypeParm)
                     {
                         auto* t = dyn_cast<TemplateTypeParmType>(init->getBaseClass());
                         if (t && t->getIdentifier())
                             out << t->getIdentifier()->getName().str();
                         else
                             out << "/*not yet implemented*/";
+                    }
+                    else if (initBaseTypeClass == Type::TemplateSpecialization)
+                    {
+                        auto* t = dyn_cast<TemplateSpecializationType>(init->getBaseClass());
+                        if (t) 
+                        {
+                            if (auto cxxdecl = asCXXDecl())
+                            {
+                                //out << toDStyle(init->getTypeSourceInfo()->getType());
+
+                                auto found = std::find_if(cxxdecl->bases_begin(), cxxdecl->bases_end(), 
+                                    [t](CXXBaseSpecifier b) { return b.getType().getTypePtr()->getAsRecordDecl() == t->getAsRecordDecl(); }
+                                );
+                                if (found != cxxdecl->bases_end())
+                                {
+                                    auto baseidx = std::distance(cxxdecl->bases_begin(), found);
+                                    out << "_b" << baseidx;
+                                }
+                                else
+                                {
+                                    // TODO: base type unable to compare with template args
+                                    //   do something else to get correct base
+                                    out << "_b0";
+                                }
+                            }
+                            else // unknown, just assume there is only one base
+                                out << "_b0";
+                            
+                            if (init->isBaseInitializer())
+                            {
+                                if (isDefaultCtorCall)
+                                    out << "._default_ctor";
+                                else
+                                    out << ".__ctor";
+                            }
+                        }
                     }
                     else
                         out << init->getBaseClass()->getAsCXXRecordDecl()->getName().str();
@@ -2522,11 +2560,16 @@ std::string DlangBindGenerator::getNextMixinId()
 
 std::tuple<std::string, std::string, bool> DlangBindGenerator::getOperatorName(const clang::FunctionDecl* decl)
 {
-    // get operator name and args
     const auto op = decl->getOverloadedOperator();
     const auto psize = decl->param_size();
-    const bool isBinary = psize == 1;
-    const bool isUnary = psize == 0;
+    return getOperatorName(op, psize);
+}
+
+
+std::tuple<std::string, std::string, bool> DlangBindGenerator::getOperatorName(clang::OverloadedOperatorKind kind, int arity)
+{
+    const bool isBinary = arity == 1;
+    const bool isUnary = arity == 0;
 
     auto arityStr = [isBinary]() {return isBinary? "opBinary" : "opUnary";};
     auto getOpArgs = [](const std::string& s) { return std::string("string op : \"") + s + "\""; };
@@ -2534,7 +2577,7 @@ std::tuple<std::string, std::string, bool> DlangBindGenerator::getOperatorName(c
     bool customMangle = false;
     std::string funcName;
     std::string opSign;
-    switch (op)
+    switch (kind)
     {
     case OverloadedOperatorKind::OO_Plus:
         funcName = arityStr(); opSign = getOpArgs("+");
@@ -2648,14 +2691,25 @@ std::tuple<std::string, std::string, bool> DlangBindGenerator::getOperatorName(c
         funcName = "op_deleteArr"; customMangle = true;
         break;
     default:
-        funcName = "op"; opSign = getOperatorSpelling(op);
+        funcName = "op"; opSign = getOperatorSpelling(kind);
         break;
     }
 
     return std::make_tuple(funcName, opSign, customMangle);
 }
 
-
+std::string DlangBindGenerator::getOperatorString(clang::OverloadedOperatorKind kind, int arity)
+{
+    auto [name, sign, _] = getOperatorName(kind, arity);
+    std::string str = name;
+    llvm::raw_string_ostream buf(str);
+    if (sign.length())
+    {
+        // opBinary!"+"
+        buf << "!" << "\"" << sign << "\"";
+    }
+    return buf.str();
+}
 
 IncludeMap::IncludeMap()
 {

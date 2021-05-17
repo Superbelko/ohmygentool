@@ -198,6 +198,10 @@ public:
     static std::string getAccessStr(clang::AccessSpecifier ac, bool isStruct = false);
     // Get overloaded operator name & template args, such as { 'opBinary', 'string op:"+"'}
     static std::tuple<std::string, std::string, bool> getOperatorName(const clang::FunctionDecl* decl);
+    // Get matching D operator name from operator kind, arity of -1 means not applicable/doesn't matter
+    static std::tuple<std::string, std::string, bool> getOperatorName(clang::OverloadedOperatorKind kind, int arity = -1);
+    // Same as above but return single string like 'opBinary!"+"'
+    static std::string getOperatorString(clang::OverloadedOperatorKind kind, int arity = -1);
 private:
     // returns "C" or "C++" depending on settings
     std::string externAsString(bool isExternC = false) const;
