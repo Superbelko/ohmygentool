@@ -235,6 +235,8 @@ namespace fs = std::experimental::filesystem;
 #endif
         auto& SM = entry->getASTContext().getSourceManager();
         std::string loc = entry->getLocation().printToString(SM);
+        if (SM.isMacroBodyExpansion(entry->getLocation()))
+            loc = SM.getExpansionLoc(entry->getLocation()).printToString(SM);
         auto [path, linecol] = getFSPathPart(loc);
         if (path.empty()) { // second attempt with different approach
             auto sfile = SM.getFileID(entry->getLocation());
