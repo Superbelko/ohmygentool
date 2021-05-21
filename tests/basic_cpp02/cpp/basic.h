@@ -9,6 +9,7 @@ inline int getIdx(int i)
 
 // the following 2 classes models non virtual inheritance, ensure proper ctor calls are issued
 // additionally special case for method whose body implemented in header but have different param names
+// this and added GeomStuff class tests that various forms of contructor initialization would be properly translated
 
 class Base
 {
@@ -134,14 +135,14 @@ public:
 template <class I>
 inline FUnknownPtr<I>::FUnknownPtr (FUnknown* unknown)
 {
-	this->ptr = unknown;
+    this->ptr = unknown;
 }
 
 template <class I>
 inline I FUnknownPtr<I>::operator= (FUnknown* unknown)
 {	
     return IPtr<I>::operator= (unknown);
-	//return IPtr<I>::operator= (0);
+    //return IPtr<I>::operator= (0);
 }
 
 
@@ -153,3 +154,83 @@ public:
 };
 
 // -------------------------------------------------
+
+// The following test confirms that GeomStuff ctor has proper syntax
+// and Calc() compiles
+struct Vec2
+{
+public:
+    float x;
+    float y;
+    inline Vec2() {}
+    inline Vec2(const Vec2& other) { x = other.x; y = other.y; }
+    inline Vec2(float val) { x = val; y = val; }
+    inline Vec2(float x, float y) : x(x), y(y) {}
+
+    inline Vec2 operator+ (const Vec2& r) {
+        return Vec2(x + r.x, y + r.y);
+    }
+
+    inline Vec2 operator* (float scale) {
+        return Vec2(x * scale, y * scale);
+    }
+};
+
+struct GeomStuff
+{
+    Vec2 a;
+    Vec2 b;
+    float h;
+    GeomStuff(int) : a(0), b(1.0f, -1.0f), h(0) {}
+    Vec2 Calc(const Vec2& smth) 
+    {
+        // random junk
+        Vec2 c = b * 2.0f;
+        return a + c;
+    }
+
+    Vec2 WithDefault(float a, Vec2 b = Vec2(0.f))
+    {
+        return b * a;
+    }
+};
+
+
+struct Mat22
+{
+    Vec2 col0;
+    Vec2 col1;
+
+    Mat22()
+    {
+    }
+
+    Mat22(const Vec2& column0, const Vec2& column1) : col0(column0), col1(column1)
+    {
+    }
+
+    const Mat22 transposed() const
+    {
+        // Extra case where type got written twice 'v0 = Vec2(Vec2(col0.x, col0.y))'
+        // ISSUE: constness loss
+        const Vec2 v0(col0.x, col1.x);
+        const Vec2 v1(col0.y, col1.y);
+
+        return Mat22(v0, v1);
+    }
+
+    static Mat22 WithLocalDecl(const Vec2& t)
+    {
+        // In addition to above make sure this has correct ctor call
+        // for now keep vectors as locals because ref-ness in D sucks
+        //Mat22 s(    Vec2(t.x,-t.y),
+        //            Vec2(-t.y,t.x));
+
+        // this version is yet another case
+        auto temp0 = Vec2(t.x,-t.y);
+        auto temp1 = Vec2(-t.y,t.x);
+        Mat22 s(temp0, temp1);
+
+        return s;
+    }
+};

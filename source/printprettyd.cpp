@@ -130,6 +130,8 @@ class CppDASTPrinterVisitor : public RecursiveASTVisitor<CppDASTPrinterVisitor>
     bool reverse = false;
     bool isCtorInitializer = false;
     bool isArrayInitializer = false;
+    CXXCtorInitializer* CtorInit;
+    VarDecl* isVarDecl;
     FeedbackContext* Feedback;
 public:
     explicit CppDASTPrinterVisitor(raw_ostream &os, PrinterHelper *helper,
@@ -137,7 +139,7 @@ public:
                 const ASTContext *Context = nullptr,
                 FeedbackContext* Feedback = nullptr)
         : OS(os), IndentLevel(Indentation), Helper(helper), Policy(Policy),
-          Context(Context), Feedback(Feedback) {}
+          Context(Context), Feedback(Feedback), CtorInit(nullptr), isVarDecl(nullptr) {}
 
     raw_ostream &Indent(int Delta = 0) {
       for (int i = 0, e = IndentLevel+Delta; i < e; ++i)
@@ -150,6 +152,7 @@ public:
     bool VisitVarDecl(VarDecl *D)
     {
         //prettyPrintPragmas(D);
+        isVarDecl = D;
 
         QualType T = D->getTypeSourceInfo()
                          ? D->getTypeSourceInfo()->getType()
@@ -202,17 +205,17 @@ public:
             }
             if (!ImplicitInit)
             {
-                if ((D->getInitStyle() == VarDecl::CallInit))
-                    OS << " = " << typeString << "("; // D doesn't have C++ ctor call syntax for variables
-                else if (D->getInitStyle() == VarDecl::CInit)
+                //if ((D->getInitStyle() == VarDecl::CallInit))
+                //    OS << " = " << typeString << "("; // D doesn't have C++ ctor call syntax for variables
+                //else //if (D->getInitStyle() == VarDecl::CInit)
                 {
                     OS << " = ";
                 }
                 isArrayInitializer = T->isArrayType();
                 TraverseStmt(Init);
                 isArrayInitializer = false;
-                if ((D->getInitStyle() == VarDecl::CallInit))
-                    OS << ")";
+                //if ((D->getInitStyle() == VarDecl::CallInit))
+                //    OS << ")";
             }
         }
         //prettyPrintAttributes(D);
@@ -526,14 +529,16 @@ public:
         if (!I->isWritten())
             return false;
 
+        CtorInit = I;
         auto m = I->getMember();
-        auto builtin = m->getType()->isBuiltinType() || m->getType()->isAnyPointerType();
-        OS << DlangBindGenerator::sanitizedIdentifier(m->getNameAsString()) << " = ";
+        auto isBaseCtor = CtorInit && CtorInit->isBaseInitializer();
+        if (m)
+            OS << DlangBindGenerator::sanitizedIdentifier(m->getNameAsString()) << " = ";
         //if (!builtin)
         //    OS << DlangBindGenerator::toDStyle(m->getType()) << "(";
 
         // special case for null assignment
-        if (m->getType()->isAnyPointerType() 
+        if (m && m->getType()->isAnyPointerType() 
             && I->getInit()->getStmtClass() == Stmt::ParenListExprClass 
             && isCtorInitNullValue(I->getInit()))
         {
@@ -544,15 +549,16 @@ public:
 
         //if (!builtin)
         //    OS << ")";
-        OS << ";\n";
+        if (!isBaseCtor)
+            OS << ";\n";
 
         return false;
     }
 
     bool VisitCXXConstructExpr(CXXConstructExpr *E)
     {
-        auto br = E->getParenOrBraceRange();
-        bool canBeImplicit = E->getConstructor()->isImplicitlyInstantiable();
+        // NOTE: prepend type in this expr should cooperate with TraverseConstructorInitializer()
+        // it is easy to mess up and write double init like `StructA(StructA(value))`
         bool prependType = isCtorInitializer;
 
         if(E->isListInitialization())
@@ -562,9 +568,44 @@ public:
         finder.TraverseStmt(E);
         if (finder.node)
             prependType = true;
+
+        // happens with var decls, handling it in VarDecl results in double init so do it here
+        //if (E->getNumArgs() && E->getArg(0)->getStmtClass() == Stmt::MaterializeTemporaryExprClass)
+        if (isVarDecl && isVarDecl->getInitStyle() == VarDecl::CallInit)
+            prependType = true;
+
+        // Do not write type if there is nested CXXConstructExpr
+        // happens with default fn arguments 
+        StmtFinderVisitor<CXXConstructExpr> nestedExprFinder;
+        if (E->getNumArgs())
+        {
+            nestedExprFinder.TraverseStmt(E->getArg(0));
+            if (nestedExprFinder.node)
+                prependType = false;
+        }
         
-        // hacky way
-        if (E->getNumArgs() == 1 && isa<Expr>(E->getArg(0)))
+        // hacky way (still relevant? see below)
+        //if (E->getNumArgs() == 1 && isa<Expr>(E->getArg(0)))
+        //    prependType = false;
+
+        // hacky test for implicit ctor call, basically check for left side, 
+        // if it is a record type and on the right side we have built-in type 
+        // then we need to prepend type to mimic ctor call
+        if (!prependType) 
+        {
+            prependType = E->getNumArgs() > 0
+                && (E->getType()->getUnqualifiedDesugaredType()->isRecordType() 
+                && !E->getArg(0)->IgnoreImpCasts()->getType()->getUnqualifiedDesugaredType()->isRecordType() );
+        }
+
+        // do not write type for base initializer calls, usually simulated inheritance with "alias this"
+        auto ctor = E->getConstructor(); 
+        auto initType = E->getType().getTypePtr();
+        auto ctorBase = ctor ? dyn_cast<RecordDecl>(ctor->getDeclContext()) : nullptr;
+        auto isBaseCtor = CtorInit   && CtorInit->isBaseInitializer();
+        //    && ( (initType && initType != CtorInit->getBaseClass()) 
+        //        || CtorInit->isBaseInitializer() );
+        if (isBaseCtor || E->isElidable())
             prependType = false;
 
         // if doesn't have braces might mean it is implicit ctor match
@@ -1170,6 +1211,14 @@ public:
 
     bool VisitCXXFunctionalCastExpr(CXXFunctionalCastExpr *Node) 
     {
+        // constructor conversion bites on default arguments 'SomeStruct(SomeStruct(value))'
+        bool isCtorConversion = Node->getCastKind() == CK_ConstructorConversion;
+        if (isCtorConversion)
+        {
+            TraverseStmt(Node->getSubExpr());
+            return false;
+        }
+        
         OS << DlangBindGenerator::toDStyle(Node->getType());
         // If there are no parens, this is list-initialization, and the braces are
         // part of the syntax of the inner construct.

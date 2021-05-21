@@ -2386,7 +2386,7 @@ void DlangBindGenerator::writeFnBody(clang::FunctionDecl* fn, bool commentOut)
                                     out << "_b0._default_ctor(";
                                 else
                                     out << "_b0.__ctor(";
-                                writeMultilineExpr(init->getInit());
+                                writeMultilineExpr(init);
                                 out << ");" << std::endl;
                                 continue;
                             }
