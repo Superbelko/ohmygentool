@@ -234,3 +234,22 @@ struct Mat22
         return s;
     }
 };
+
+// regular inheritance, make sure it translates properly
+class VBase
+{
+protected:
+    inline VBase(void* concreteType, int baseFlags) : _concreteType(concreteType), _baseFlags(baseFlags) {}
+    inline VBase(int baseFlags) : _baseFlags(baseFlags) {}
+    virtual ~VBase() {}
+    void* _concreteType;
+    int _baseFlags;
+};
+
+class VOther : public VBase
+{
+protected:
+    VOther(void* concreteType, int baseFlags) : VBase(concreteType, baseFlags) {}
+    VOther(int baseFlags) : VBase(baseFlags) {}
+    virtual ~VOther() {}
+};

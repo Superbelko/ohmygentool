@@ -532,10 +532,17 @@ public:
         CtorInit = I;
         auto m = I->getMember();
         auto isBaseCtor = CtorInit && CtorInit->isBaseInitializer();
+        bool isSuper = (I->getBaseClass() ? 
+                            isPossiblyVirtual(I->getBaseClass()->getAsRecordDecl()) : false);
+        
         if (m)
             OS << DlangBindGenerator::sanitizedIdentifier(m->getNameAsString()) << " = ";
         //if (!builtin)
         //    OS << DlangBindGenerator::toDStyle(m->getType()) << "(";
+
+        // add parens to ctor call
+        if (isSuper)
+            OS << "(";
 
         // special case for null assignment
         if (m && m->getType()->isAnyPointerType() 
@@ -549,6 +556,8 @@ public:
 
         //if (!builtin)
         //    OS << ")";
+        if (isSuper)
+            OS << ")";
         if (!isBaseCtor)
             OS << ";\n";
 

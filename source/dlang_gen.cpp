@@ -2323,6 +2323,15 @@ void DlangBindGenerator::writeFnBody(clang::FunctionDecl* fn, bool commentOut)
         }
     };
 
+    // D requires that structs have known compile time initializer
+    // so it is basically prohibited to have zero argument default ctor
+    // though it can be hacked around to have default arguments ctor to look like one
+    static auto fakeDefaultCtor = [] (const clang::FunctionDecl* fn) -> bool {
+        if (fn->param_size() == 0)
+            return false;
+        return std::all_of(fn->param_begin(), fn->param_end(), [](ParmVarDecl* p) {return p->hasDefaultArg(); });
+    };
+
     const FunctionDecl* fndef = nullptr;
     if (!fn->getBody())
         fn->getBody(fndef);
@@ -2382,10 +2391,7 @@ void DlangBindGenerator::writeFnBody(clang::FunctionDecl* fn, bool commentOut)
                             {
                                 if (commentOut)
                                     out << "//";
-                                if (ctdecl->isDefaultConstructor())
-                                    out << "_b0._default_ctor(";
-                                else
-                                    out << "_b0.__ctor(";
+                                out << "_b0.__ctor(";
                                 writeMultilineExpr(init);
                                 out << ");" << std::endl;
                                 continue;
@@ -2408,7 +2414,10 @@ void DlangBindGenerator::writeFnBody(clang::FunctionDecl* fn, bool commentOut)
                     if (iexpr && isa<CXXConstructExpr>(iexpr))
                     {
                         if (auto ctinit = dyn_cast<CXXConstructExpr>(iexpr))
-                            isDefaultCtorCall = ctinit->getConstructor()->isDefaultConstructor();
+                        {
+                            isDefaultCtorCall = ctinit->getConstructor()->isDefaultConstructor() 
+                                && !fakeDefaultCtor(ctdecl);
+                        }
                     }
                     auto initBaseTypeClass = init->getBaseClass()->getTypeClass();
                     if (initBaseTypeClass == Type::Typedef)
@@ -2475,7 +2484,7 @@ void DlangBindGenerator::writeFnBody(clang::FunctionDecl* fn, bool commentOut)
                     else
                         out << init->getBaseClass()->getAsCXXRecordDecl()->getName().str();
                 }
-                writeMultilineExpr(init->getInit());
+                writeMultilineExpr(init);
                 out << ";" << std::endl;
             }
         }
