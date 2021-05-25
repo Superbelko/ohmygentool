@@ -130,6 +130,7 @@ class CppDASTPrinterVisitor : public RecursiveASTVisitor<CppDASTPrinterVisitor>
     bool reverse = false;
     bool isCtorInitializer = false;
     bool isArrayInitializer = false;
+    bool AllowUnsafeCasts = true; // FIXME: Should be in Policy
     CXXCtorInitializer* CtorInit;
     VarDecl* isVarDecl;
     FeedbackContext* Feedback;
@@ -288,10 +289,20 @@ public:
         OS << "return";
         if (Node->getRetValue()) {
             OS << " ";
+            bool isPtr = Node->getRetValue()->getType()->isPointerType();
+            bool isRetConst = Node->getRetValue()->getType().isConstQualified();
+            bool isValueConst = Node->getRetValue()->IgnoreImplicit()->getType().isConstQualified();
             if ((Node->getRetValue()->getType()->isIntegralOrEnumerationType() && Node->getRetValue()->IgnoreImpCasts()->getType()->isIntegralOrEnumerationType())
                 && needsNarrowCast(Node->getRetValue(), Node->getRetValue()->IgnoreImpCasts()))
             {
                 writeNarrowCast(Node->getRetValue()->getType(), Node->getRetValue()->IgnoreImpCasts());
+            }
+            else if (AllowUnsafeCasts && isPtr && isValueConst && !isRetConst)
+            {
+                // write const cast in place, this usually happens in const methods
+                // cast const away for ret value
+                OS << "cast(" << DlangBindGenerator::toDStyle(Node->getRetValue()->getType()) << ") ";
+                TraverseStmt(Node->getRetValue()->IgnoreImplicit());
             }
             else
                 TraverseStmt(Node->getRetValue());
@@ -1284,6 +1295,7 @@ public:
     bool VisitBinaryOperator(BinaryOperator *Node) 
     {
         bool isPtr = false;
+        bool isAssign = Node->getOpcode() == BinaryOperator::Opcode::BO_Assign;
         if (auto member = dyn_cast<MemberExpr>(Node->getLHS()))
             isPtr = member->getType()->isPointerType();
         else if (auto declref = dyn_cast<DeclRefExpr>(Node->getLHS()))
@@ -1319,6 +1331,15 @@ public:
                 && needsNarrowCast(Node->getLHS()->IgnoreImpCasts(), Node->getRHS()->IgnoreImpCasts()))
             {
                 writeNarrowCast(Node->getLHS()->getType(), Node->getRHS());
+            }
+            
+            else if (AllowUnsafeCasts && isAssign && isPtr
+                && (!Node->getLHS()->getType().isConstQualified() && noImpCastsRHS->getType().isConstQualified()))
+            {
+                // write const cast in place, this usually happens in const methods
+                // where it is assigns const RH value to mutable LH    
+                OS << "cast(" << DlangBindGenerator::toDStyle(Node->getLHS()->getType()) << ") ";
+                TraverseStmt(noImpCastsRHS);
             }
             else
                 TraverseStmt(Node->getRHS());

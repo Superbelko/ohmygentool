@@ -253,3 +253,27 @@ protected:
     VOther(int baseFlags) : VBase(baseFlags) {}
     virtual ~VOther() {}
 };
+
+struct Material;
+struct ExtraSmth;
+
+class ComplexClass
+{
+    Vec2 p;
+    Material* m;
+    ExtraSmth* ex;
+
+    // this should have injected const casts
+    void copy(const ComplexClass* other)
+    {
+        p = other->p;
+        m = other->m; 
+        ex = other->ex;
+    }
+
+    // const cast needed in D
+    Material* getMaterial() const 
+    {
+        return m;
+    }
+};
