@@ -2518,7 +2518,7 @@ void DlangBindGenerator::writeFnBody(clang::FunctionDecl* fn, bool commentOut)
                         }
                     }
                     else
-                        out << init->getBaseClass()->getAsCXXRecordDecl()->getName().str();
+                        out << sanitizedIdentifier(toDStyle(QualType(init->getBaseClass(), 0)));
                 }
                 writeMultilineExpr(init);
                 out << ";" << std::endl;
