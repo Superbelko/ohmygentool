@@ -277,3 +277,33 @@ class ComplexClass
         return m;
     }
 };
+
+struct BitFields
+{
+    // normal 32 bit size
+    int a1 : 16;
+    int a2 : 8;
+    int a3 : 4;
+    int a4 : 4;
+
+    int pad1;
+
+    // normal 64 bit size
+    int b1 : 16;
+    int b2 : 16;
+    int b3 : 8;
+    int b4 : 8;
+    int b5 : 4;
+    int b6 : 4;
+    int b7 : 4;
+    int b8 : 4;
+
+    int pad2;
+
+    // long 64+ bits
+    int c1 : 30;
+    int c2 : 30;
+    int c3 : 10;
+
+    int pad3;
+};

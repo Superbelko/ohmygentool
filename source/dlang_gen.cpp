@@ -1007,6 +1007,14 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
     }
     out << std::endl;
     out << "{" << std::endl;
+
+    // force inner alignment if there any bitfields
+    bool hasBitfields = std::count_if( decl->field_begin(), decl->field_end(), 
+        [](const FieldDecl* field) { return field->isBitField(); }
+    );
+    if (hasBitfields && ti.Align > 0)
+        out << "align(" << (ti.Align / 8) << "):" << std::endl;
+
     {
         IndentBlock _classbody(out, 4);
         if (decl->getIdentifier())
@@ -1743,7 +1751,11 @@ void DlangBindGenerator::handleFields(const clang::RecordDecl *decl)
 
     isPrevIsBitfield = false;
     accumBitFieldWidth = 0;
+    bool isNewBitfield = true; // controls comma placing at open
     std::string bitwidthExpr;
+    auto writeBitfieldOpen = [this]() { out << "mixin(bitfields!(" << std::endl; };
+    auto writeBitfieldClose = [this]() { out << "));" << std::endl; };
+    auto isBitfieldNeedsPadding = [](int width) -> bool { return !(width == 8 || width == 16 || width == 32 || width == 64); };
 
     for (const auto it : decl->fields())
     {
@@ -1774,9 +1786,11 @@ void DlangBindGenerator::handleFields(const clang::RecordDecl *decl)
         bool bitfield = it->isBitField();
         if (bitfield)
         {
+            isNewBitfield = false;
             if (!isPrevIsBitfield)
             {
-                out << "mixin(bitfields!(" << std::endl;
+                writeBitfieldOpen();
+                isNewBitfield = true;
             }
             std::string s;
             llvm::raw_string_ostream os(s);
@@ -1784,7 +1798,27 @@ void DlangBindGenerator::handleFields(const clang::RecordDecl *decl)
             printPrettyD(it->getBitWidth(), os, nullptr, *DlangBindGenerator::g_printPolicy, 0, &decl->getASTContext(), feedback);
             bitwidthExpr = os.str();
             bitwidth = it->getBitWidthValue(decl->getASTContext());
-            accumBitFieldWidth += bitwidth;
+
+            // bitfield mixin doesn't support wide bitfields
+            if (accumBitFieldWidth + bitwidth > 64)
+            {
+                // indentation required
+                {
+                    IndentBlock _indent(out, 4);
+                    if (!isNewBitfield)
+                    {
+                        out << ", " << std::endl;
+                    }
+                    // pad to 64 bits
+                    out << "uint, \"\", " << 64 - accumBitFieldWidth;
+                    writeBitfieldClose();
+                }
+                writeBitfieldOpen();
+                accumBitFieldWidth = bitwidth;
+                isNewBitfield = true;
+            }
+            else
+                accumBitFieldWidth += bitwidth;
         }
         else
         {
@@ -1792,10 +1826,13 @@ void DlangBindGenerator::handleFields(const clang::RecordDecl *decl)
             if (isPrevIsBitfield)
             {
                 IndentBlock _indent(out, 4);
-                // still on same line
-                out << "," << std::endl;
 
-                if (accumBitFieldWidth % 8 != 0)
+                // pad and split bitfields if necessary
+                if (isBitfieldNeedsPadding(accumBitFieldWidth))
+                {
+                    // still on same line
+                    out << "," << std::endl;
+
                     if (accumBitFieldWidth <= 8)
                     {
                         out << "uint, \"\", " << 8 - accumBitFieldWidth;
@@ -1814,11 +1851,10 @@ void DlangBindGenerator::handleFields(const clang::RecordDecl *decl)
                     }
                     else
                         assert(0 && "Split it up already!");
+                }
 
                 accumBitFieldWidth = 0;
-
-                // close bitfield
-                out << "));" << std::endl;
+                writeBitfieldClose();
             }
         }
 
@@ -1841,7 +1877,7 @@ void DlangBindGenerator::handleFields(const clang::RecordDecl *decl)
         {
             // TODO: close this bitfield and start a new one on zero width
             IndentBlock _indent(out, 4);
-            if (isPrevIsBitfield) // we are still on same line
+            if (!isNewBitfield) // we are still on same line
                 out << "," << std::endl;
             out << fieldTypeStr << ", ";
             out << "\"";
@@ -1873,7 +1909,7 @@ void DlangBindGenerator::handleFields(const clang::RecordDecl *decl)
     // if we end up with last field being a bit field
     // close bitfield
     if (isPrevIsBitfield)
-        out << "));" << std::endl;
+        writeBitfieldClose();
 }
 
 

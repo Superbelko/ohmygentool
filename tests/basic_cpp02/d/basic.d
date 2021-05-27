@@ -54,3 +54,9 @@ unittest
 	ptr.val = 42;
 	assert((cast(MyInt)myInt.getInterface).val == 42);
 }
+
+unittest
+{
+	import std.traits;
+	static assert (BitFields.sizeof == getUDAs!(BitFields, CppClassSizeAttr)[0].size);
+}
