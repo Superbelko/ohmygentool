@@ -891,6 +891,31 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
     }
 
     handledClassDecl = true;
+
+    if (classOrStructName.empty())
+    {
+        if (auto td = decl->getTypedefNameForAnonDecl())
+        {
+            classOrStructName = td->getName().str();
+            const auto& newId = decl->getASTContext().Idents.get(td->getName());
+            const_cast<RecordDecl*>(decl)->setDeclName(DeclarationName(&newId));
+        }
+        else
+        {
+            globalAnonTypeId += 1;
+            deanonimizeTypedef(
+                const_cast<RecordDecl*>(decl), 
+                std::string("AnonType_").append(std::to_string(globalAnonTypeId))
+            );
+            classOrStructName = decl->getName().str();
+        }
+    }
+    else
+    {
+        deanonimizeTypedef(const_cast<RecordDecl*>(decl), std::string_view(), &localAnonRecordId);
+    }
+
+    
     
     const bool hasNamespace = decl->getDeclContext()->isNamespace();
     const auto externStr = externAsString(decl->getDeclContext()->isExternCContext());
@@ -902,6 +927,15 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
     else
         nsPolicy->beginEntry(decl, externStr);
 
+    // pragma mangle
+    auto sanitizedName = sanitizedIdentifier(classOrStructName);
+    if (sanitizedName != classOrStructName)
+    {
+        // remap type manling to use real name
+        //    pragma(mangle, "function")
+        //    struct function_ {}
+        out << "pragma(mangle, \"" << classOrStructName << "\")" << std::endl;
+    }
 
     TypeInfo ti;
     if (!decl->isTemplated()) // skip templated stuff for now
@@ -936,31 +970,7 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
         out << "union ";
     else
         out << "struct ";
-
-    if (classOrStructName.empty())
-    {
-        if (auto td = decl->getTypedefNameForAnonDecl())
-        {
-            classOrStructName = td->getName().str();
-            const auto& newId = decl->getASTContext().Idents.get(td->getName());
-            const_cast<RecordDecl*>(decl)->setDeclName(DeclarationName(&newId));
-        }
-        else
-        {
-            globalAnonTypeId += 1;
-            deanonimizeTypedef(
-                const_cast<RecordDecl*>(decl), 
-                std::string("AnonType_").append(std::to_string(globalAnonTypeId))
-            );
-            classOrStructName = decl->getName().str();
-        }
-    }
-    else
-    {
-        deanonimizeTypedef(const_cast<RecordDecl*>(decl), std::string_view(), &localAnonRecordId);
-    }
-
-    out << classOrStructName;
+    out << sanitizedName;
 
     if (cxxdecl)
     {
