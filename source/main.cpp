@@ -238,6 +238,16 @@ void handleDecl(Decl* decl, IAbstractGenerator* handler)
 		handler->onTypedef(cast<TypedefDecl>(decl));
 	}
 
+	else if (isa<UsingDecl>(decl))
+	{
+		handler->onUsingDecl(cast<UsingDecl>(decl));
+	}
+
+	else if (isa<TypeAliasDecl>(decl))
+	{
+		handler->onTypeAliasDecl(cast<TypeAliasDecl>(decl));
+	}
+
 	else if (isa<VarDecl>(decl))
 	{
 		handler->onGlobalVar(cast<VarDecl>(decl));
@@ -255,6 +265,11 @@ void handleDecl(Decl* decl, IAbstractGenerator* handler)
 		auto ec = cast<LinkageSpecDecl>(decl);
 		for (auto d : ec->decls())
 			handleDecl(d, handler);
+	}
+
+	else
+	{
+		llvm::outs() << "INFO: unhandled decl of kind '" << decl->getDeclKindName() << "' at " << path << '\n';
 	}
 }
 

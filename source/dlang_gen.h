@@ -170,6 +170,8 @@ public:
     virtual void onEnum(const clang::EnumDecl* decl) override;
     virtual void onFunction(const clang::FunctionDecl* decl) override;
     virtual void onTypedef(const clang::TypedefDecl* decl) override;
+    virtual void onUsingDecl(const clang::UsingDecl *decl) override;
+    virtual void onTypeAliasDecl(const clang::TypeAliasDecl *decl) override;
     virtual void onGlobalVar(const clang::VarDecl* decl) override;
 
     // On define macro event

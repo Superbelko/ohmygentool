@@ -1286,6 +1286,38 @@ void DlangBindGenerator::onTypedef(const clang::TypedefDecl *decl)
     out << std::endl;
 }
 
+void DlangBindGenerator::onUsingDecl(const clang::UsingDecl *decl)
+{
+    if (!addType(decl, storedTypes))
+        return;
+    
+    std::string s;
+    llvm::raw_string_ostream os(s);
+    printPrettyD(decl->getBody(), os, nullptr, *DlangBindGenerator::g_printPolicy, 0, &decl->getASTContext(), feedback);
+
+    out << "extern(" << externAsString(decl->getDeclContext()->isExternCContext()) << ")" << std::endl;
+    out << "alias " 
+        << sanitizedIdentifier(decl->getName().str()) 
+        << " = " 
+        << os.str() 
+        << ";" << std::endl
+        << std::endl;
+}
+
+void DlangBindGenerator::onTypeAliasDecl(const clang::TypeAliasDecl *decl)
+{
+    if (!addType(decl, storedTypes))
+        return;
+
+    out << "extern(" << externAsString(decl->getDeclContext()->isExternCContext()) << ")" << std::endl;
+    out << "alias "
+        << sanitizedIdentifier(decl->getName().str())
+        << " = "
+        << sanitizedIdentifier(toDStyle(decl->getUnderlyingType()))
+        << ";" << std::endl 
+        << std::endl;
+}
+
 
 void DlangBindGenerator::onGlobalVar(const clang::VarDecl *decl)
 {
@@ -1750,6 +1782,16 @@ void DlangBindGenerator::handleInnerDecls(const clang::RecordDecl *decl)
         {
             const auto td = cast<TypedefDecl>(it);
             onTypedef(td);
+        }
+        if (isa<UsingDecl>(it))
+        {
+            const auto ud = cast<UsingDecl>(it);
+            onUsingDecl(ud);
+        }
+        if (isa<TypeAliasDecl>(it))
+        {
+            const auto ta = cast<TypeAliasDecl>(it);
+            onTypeAliasDecl(ta);
         }
     }
 }

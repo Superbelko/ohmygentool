@@ -8,6 +8,8 @@ namespace clang
     class FunctionDecl;
     class EnumDecl;
     class TypedefDecl;
+	class UsingDecl;
+	class TypeAliasDecl;
     class VarDecl;
 }
 
@@ -31,6 +33,8 @@ namespace gentool
 		virtual void onFunction(const clang::FunctionDecl* decl)=0;
 		virtual void onEnum(const clang::EnumDecl* decl)=0;
 		virtual void onTypedef(const clang::TypedefDecl* decl)=0;
+		virtual void onUsingDecl(const clang::UsingDecl* decl)=0;
+		virtual void onTypeAliasDecl(const clang::TypeAliasDecl* decl)=0;
 		virtual void onGlobalVar(const clang::VarDecl* decl)=0;
 		virtual void setOptions(const InputOptions* inOpt, const OutputOptions* outOpt)=0;
 		virtual bool isRelevantPath(const std::string_view path)=0; // if true file will be parsed, otherwise ignored

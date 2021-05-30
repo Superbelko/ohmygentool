@@ -223,6 +223,20 @@ public:
         return false;
     }
 
+    bool VisitStaticAssertDecl(StaticAssertDecl* Decl)
+    {
+        OS << "static assert";
+        OS << "(";
+        TraverseStmt(Decl->getAssertExpr());
+        if (auto msg = Decl->getMessage())
+        {
+            OS << ", ";
+            msg->outputString(OS);
+        }
+        OS << ")";
+        return false;
+    }
+
     void printRawDeclStmt(DeclStmt* Node)
     {
         const auto len = std::distance(Node->decl_begin(), Node->decl_end());
