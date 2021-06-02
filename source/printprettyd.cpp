@@ -230,8 +230,11 @@ public:
         TraverseStmt(Decl->getAssertExpr());
         if (auto msg = Decl->getMessage())
         {
-            OS << ", ";
-            msg->outputString(OS);
+            if (msg->getLength() > 0)
+            {
+                OS << ", ";
+                msg->outputString(OS);
+            }
         }
         OS << ")";
         return false;
@@ -794,22 +797,27 @@ public:
             TraverseStmt(Node->getSyntacticForm());
             return false;
         }
-        if (isArrayInitializer)
+        bool isArrayType = false;
+        if (auto desugared = Node->getType()->getUnqualifiedDesugaredType())
+        {
+            // is it simply a typedef type that leads to an array?
+            isArrayType = desugared->isArrayType();
+        }
+
+        if (isArrayInitializer || isArrayType)
             OS << "[";
         else
-            OS << "{";
+            OS << DlangBindGenerator::sanitizedIdentifier(DlangBindGenerator::toDStyle(Node->getType())) << "(";
         for (unsigned i = 0, e = Node->getNumInits(); i != e; ++i) 
         {
             if (i) OS << ", ";
             if (Node->getInit(i))
                 TraverseStmt(Node->getInit(i));
-            else 
-                OS << "{}";
         }
-        if (isArrayInitializer)
+        if (isArrayInitializer || isArrayType)
             OS << "]";
         else
-            OS << "}";
+            OS << ")";
         return false;
     }
 

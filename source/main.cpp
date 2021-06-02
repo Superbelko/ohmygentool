@@ -267,6 +267,12 @@ void handleDecl(Decl* decl, IAbstractGenerator* handler)
 			handleDecl(d, handler);
 	}
 
+	else if (isa<StaticAssertDecl>(decl))
+	{
+		auto sa = cast<StaticAssertDecl>(decl);
+		handler->onStaticAssertDecl(sa);
+	}
+
 	else
 	{
 		llvm::outs() << "INFO: unhandled decl of kind '" << decl->getDeclKindName() << "' at " << path << '\n';

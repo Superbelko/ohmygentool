@@ -1318,6 +1318,17 @@ void DlangBindGenerator::onTypeAliasDecl(const clang::TypeAliasDecl *decl)
         << std::endl;
 }
 
+void DlangBindGenerator::onStaticAssertDecl(const clang::StaticAssertDecl *decl)
+{
+    // each header can be parsed multiple times, but we write decl only once, but seems ok as is
+    //if (!addType(decl, storedTypes))
+    //    return;
+
+    std::string s;
+    llvm::raw_string_ostream os(s);
+    printPrettyD(decl->getBody(), os, nullptr, *DlangBindGenerator::g_printPolicy, 0, &decl->getASTContext(), feedback);
+    out << os.str() << std::endl;
+}
 
 void DlangBindGenerator::onGlobalVar(const clang::VarDecl *decl)
 {
@@ -1897,7 +1908,7 @@ void DlangBindGenerator::handleFields(const clang::RecordDecl *decl)
                     {
                         out << "uint, \"\", " << 32 - accumBitFieldWidth;
                     }
-                    else if (accumBitFieldWidth <= 64)
+                    else if (accumBitFieldWidth < 64) // strictly less, to avoid zero pad at width == 64
                     {
                         out << "uint, \"\", " << 64 - accumBitFieldWidth;
                     }
@@ -2184,7 +2195,7 @@ void DlangBindGenerator::handleMethods(const clang::CXXRecordDecl *decl)
             out << funcName;
         else
             out << sanitizedIdentifier(m->getName().str());
-        
+
         // runtime args
         out << "(";
         writeFnRuntimeArgs(getFnBody(m));

@@ -35,6 +35,7 @@ namespace gentool
 		virtual void onTypedef(const clang::TypedefDecl* decl)=0;
 		virtual void onUsingDecl(const clang::UsingDecl* decl)=0;
 		virtual void onTypeAliasDecl(const clang::TypeAliasDecl* decl)=0;
+		virtual void onStaticAssertDecl(const clang::StaticAssertDecl* decl)=0;
 		virtual void onGlobalVar(const clang::VarDecl* decl)=0;
 		virtual void setOptions(const InputOptions* inOpt, const OutputOptions* outOpt)=0;
 		virtual bool isRelevantPath(const std::string_view path)=0; // if true file will be parsed, otherwise ignored

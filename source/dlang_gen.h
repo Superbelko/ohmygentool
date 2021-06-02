@@ -172,6 +172,7 @@ public:
     virtual void onTypedef(const clang::TypedefDecl* decl) override;
     virtual void onUsingDecl(const clang::UsingDecl *decl) override;
     virtual void onTypeAliasDecl(const clang::TypeAliasDecl *decl) override;
+    virtual void onStaticAssertDecl(const clang::StaticAssertDecl* decl) override;
     virtual void onGlobalVar(const clang::VarDecl* decl) override;
 
     // On define macro event

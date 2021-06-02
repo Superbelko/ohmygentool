@@ -235,6 +235,17 @@ struct Mat22
     }
 };
 
+typedef struct Matrix3x3 {
+    float vals[3][3];
+} Matrix3x3;
+
+static constexpr Matrix3x3 identity3 = {{
+    { 1.0f, 0.0f, 0.0f },
+    { 0.0f, 1.0f, 0.0f },
+    { 0.0f, 0.0f, 1.0f },
+}};
+
+
 // regular inheritance, make sure it translates properly
 class VBase
 {
