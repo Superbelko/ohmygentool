@@ -291,6 +291,12 @@ void printQualifier(NestedNameSpecifier* qualifier, llvm::raw_ostream& os)
         {
             SpecType->getTemplateName().print(os, *DlangBindGenerator::g_printPolicy, true);
             printDTemplateArgumentList(os, SpecType->template_arguments(), *DlangBindGenerator::g_printPolicy);
+        } else if (const TemplateTypeParmType* SpecType = dyn_cast<TemplateTypeParmType>(T)) {
+            if (auto id = SpecType->getIdentifier()) {
+                os << id->getName().str();
+            }
+            else
+                os << DlangBindGenerator::toDStyle(QualType(T, 0));
         } else {
             os << DlangBindGenerator::toDStyle(QualType(T, 0));
         }
@@ -1621,6 +1627,24 @@ std::string DlangBindGenerator::toDStyle(QualType type)
         os << dn->getIdentifier()->getName().str();
         res = os.str();
     }
+    else if (const auto subst = typeptr->getAs<SubstTemplateTypeParmType>())
+    {
+        if (auto typeparm = subst->getReplacedParameter())
+        {
+
+            if (auto d = typeparm->getDecl())
+                res = toDStyle(QualType(d->getTypeForDecl(),0));
+            else if (auto id = typeparm->getIdentifier())
+                res = id->getName().str();
+            else 
+                goto err_case;
+        }
+        else
+        {
+        err_case:
+            res = "error-type"; // shouldn't reach
+        }
+    }
     else
     {
         res = type.getAsString(*DlangBindGenerator::g_printPolicy);
@@ -1912,8 +1936,9 @@ void DlangBindGenerator::handleFields(const clang::RecordDecl *decl)
                     {
                         out << "uint, \"\", " << 64 - accumBitFieldWidth;
                     }
-                    else
-                        assert(0 && "Split it up already!");
+                    else if (accumBitFieldWidth > 64)
+                        llvm::outs() << "Erorr: unhandled bitfield case, got bitfield width >64 bits:\n"
+                            << "    " << it->getName() << "\n";
                 }
 
                 accumBitFieldWidth = 0;
@@ -2341,6 +2366,7 @@ void DlangBindGenerator::writeTemplateArgs(const clang::TemplateDecl* td)
 void DlangBindGenerator::writeTemplateArgs(const clang::TemplateArgumentList* ta)
 {
     bool first = true;
+    int pos = 0;
     for (const auto tp : ta->asArray())
     {
         auto tk = tp.getKind();
@@ -2357,6 +2383,11 @@ void DlangBindGenerator::writeTemplateArgs(const clang::TemplateArgumentList* ta
                 out << s;
                 break;
             case TemplateArgument::ArgKind::Type:
+                // index for parameter in template specialization because D doesn't allow unnamed params
+                if (first)
+                    out << "T : ";
+                else
+                    out << "T" << pos << " : ";
                 out << toDStyle(tp.getAsType());
                 break;
             default: break;
@@ -2365,6 +2396,7 @@ void DlangBindGenerator::writeTemplateArgs(const clang::TemplateArgumentList* ta
             first = false;
         else
             out << ", ";
+        pos += 1;
     }
 }
 

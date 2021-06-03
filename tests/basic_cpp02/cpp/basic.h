@@ -318,3 +318,40 @@ struct BitFields
 
     int pad3;
 };
+
+// generic thing
+template<typename T>
+struct Thing
+{
+    T prop;
+};
+
+// specialized thing, D version should have name for specialization
+template<>
+struct Thing<char>
+{
+    char prop;
+};
+
+
+// -------------------------
+struct FilterType
+{
+	enum Enum
+	{
+		A,
+		B,
+        C,
+		MAX = 8,
+		UNDEFINED = MAX-1
+	};
+};
+
+typedef int FilterObjectAttributes;
+
+// enum arithmetics, requires int to enum casts
+inline FilterType::Enum GetFilterType(FilterObjectAttributes attr)
+{
+	return FilterType::Enum(attr & (FilterType::MAX-1));
+}
+// -------------------------

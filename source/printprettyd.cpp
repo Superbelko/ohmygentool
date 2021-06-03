@@ -1261,12 +1261,23 @@ public:
             return false;
         }
         
+        // do we need "narrow" cast to enum type? (enum arithmetics)
+        bool needsEnumCast = //needsNarrowCast(Node, Node->getSubExpr())
+            ( Node->getType()->getUnqualifiedDesugaredType()->isEnumeralType()
+                && !Node->getSubExpr()->getType()->getUnqualifiedDesugaredType()->isEnumeralType()
+            );
+        
         OS << DlangBindGenerator::toDStyle(Node->getType());
         // If there are no parens, this is list-initialization, and the braces are
         // part of the syntax of the inner construct.
         if (Node->getLParenLoc().isValid())
             OS << "(";
-        TraverseStmt(Node->getSubExpr());
+
+        if (needsEnumCast)
+            writeNarrowCast(Node->getType(), Node->getSubExpr());
+        else
+            TraverseStmt(Node->getSubExpr());
+
         if (Node->getLParenLoc().isValid())
             OS << ")";
         return false;
