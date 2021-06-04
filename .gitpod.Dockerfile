@@ -5,10 +5,15 @@ FROM gitpod/workspace-full
 ARG D_VERSION=ldc-1.26.0
 ARG DPATH=/dlang
 
-# cmake, ninja, lld, clang, clangd, etc already installed
-# See: https://github.com/gitpod-io/workspace-images/blob/master/full/Dockerfile
-# If you run "sudo apt-get update" first, it'll install LLVM 13 tools, but these seem to break somehow
-RUN sudo apt-get install -y lldb \
+ARG LLVM_GITHUB_RELEASE_TAG=llvmorg-12.0.1-rc1
+ARG LLVM_GITHUB_RELEASE_FILENAME=clang+llvm-12.0.1-rc1-x86_64-linux-gnu-ubuntu-21.04
+RUN set -ex \
+  && sudo apt-get install xz-utils \
+  && sudo wget -O llvm-clang.tar.xz https://github.com/llvm/llvm-project/releases/download/${LLVM_GITHUB_RELEASE_TAG}/${LLVM_GITHUB_RELEASE_FILENAME}.tar.xz \
+  && sudo tar -xvf llvm-clang.tar.xz \
+  && sudo cp -R ./${LLVM_GITHUB_RELEASE_FILENAME}/* /usr \
+  && sudo rm ./llvm-clang.tar.xz \
+  && sudo rm -rf ./${LLVM_GITHUB_RELEASE_FILENAME} \
   && sudo update-alternatives --install "/usr/bin/ld" "ld" "/usr/bin/lld" 50
 
 RUN set -ex \
