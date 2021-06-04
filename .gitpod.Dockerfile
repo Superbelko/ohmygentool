@@ -8,7 +8,7 @@ ARG DPATH=/dlang
 # cmake, lld, clang, clangd, etc already installed
 # See: https://github.com/gitpod-io/workspace-images/blob/master/full/Dockerfile
 RUN sudo apt-get install -y libclang-dev llvm-dev \
-  && update-alternatives --install "/usr/bin/ld" "ld" "/usr/bin/lld"
+  && update-alternatives --install "/usr/bin/ld" "ld" "/usr/bin/lld" 50
 
 RUN set -ex \
   && mkdir ${DPATH} \
