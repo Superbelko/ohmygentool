@@ -7,13 +7,12 @@ ARG DPATH=/dlang
 
 # cmake, lld, clang, clangd, etc already installed
 # See: https://github.com/gitpod-io/workspace-images/blob/master/full/Dockerfile
-# This installs LLVM 10 
-
-RUN sudo wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add - \
-  && add-apt-repository "deb http://apt.llvm.org/focal/ llvm-toolchain-focal main" \
-  && apt-get update \
-  && apt-get install -y libclang-dev llvm-dev lldb \
-  && update-alternatives --install "/usr/bin/ld" "ld" "/usr/bin/lld" 50
+RUN sudo curl -o /var/lib/apt/dazzle-marks/llvm.gpg -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key \
+    && apt-key add /var/lib/apt/dazzle-marks/llvm.gpg \
+    && echo "deb https://apt.llvm.org/focal/ llvm-toolchain-focal main" >> /etc/apt/sources.list.d/llvm.list \
+    && apt-get update \
+    && apt-get install -y libclang-dev llvm-dev lldb \
+    && update-alternatives --install "/usr/bin/ld" "ld" "/usr/bin/lld" 50
 
 RUN set -ex \
   && mkdir ${DPATH} \
