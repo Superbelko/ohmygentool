@@ -13,7 +13,7 @@ RUN sudo apt-get update \
 
 RUN set -ex \
   && sudo mkdir ${DPATH} \
-  && sudo curl -fsS https://dlang.org/install.sh | bash -s ${D_VERSION} -p ${DPATH} \
+  && sudo curl -fsS https://dlang.org/install.sh | sudo bash -s ${D_VERSION} -p ${DPATH} \
   && sudo chmod 755 -R ${DPATH} \
   && sudo ln -s ${DPATH}/${D_VERSION} ${DPATH}/dc \
   && sudo ls ${DPATH}
