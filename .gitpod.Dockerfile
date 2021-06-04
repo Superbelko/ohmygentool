@@ -8,8 +8,8 @@ ARG DPATH=/dlang
 # cmake, ninja, lld, clang, clangd, etc already installed
 # See: https://github.com/gitpod-io/workspace-images/blob/master/full/Dockerfile
 # If you run "sudo apt-get update" first, it'll install LLVM 13 tools, but these seem to break somehow
-RUN sudo apt-get install -y libclang-dev llvm-dev lldb \
-    && sudo update-alternatives --install "/usr/bin/ld" "ld" "/usr/bin/lld" 50
+RUN sudo apt-get install -y lldb \
+  && sudo update-alternatives --install "/usr/bin/ld" "ld" "/usr/bin/lld" 50
 
 RUN set -ex \
   && sudo mkdir ${DPATH} \
@@ -21,9 +21,3 @@ RUN set -ex \
 ENV PATH="${DPATH}/${D_VERSION}/bin:${PATH}"
 ENV LIBRARY_PATH="${DPATH}/${D_VERSION}/lib:${LIBRARY_PATH}"
 ENV LD_LIBRARY_PATH="${DPATH}/${D_VERSION}/lib:${LD_LIBRARY_PATH}"
-
-# Not actually an arg, do not change!
-# Just a hacky variable. This is determined by Gitpod and uses the repo name.
-ARG REPO_DIR=/workspace/ohmygentool
-RUN sudo git clone https://github.com/Tencent/rapidjson.git ${REPO_DIR}/deps/rapidjson \
-  && sudo cp -r ${REPO_DIR}/deps/rapidjson/include/rapidjson ${REPO_DIR}/include
