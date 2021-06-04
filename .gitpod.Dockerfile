@@ -1,3 +1,5 @@
+# Test locally with:
+# $ docker build -f .gitpod.Dockerfile -t gitpod-dockerfile-test .
 FROM gitpod/workspace-full
 
 ARG D_VERSION=ldc-1.26.0
@@ -5,7 +7,7 @@ ARG DPATH=/dlang
 
 # cmake, lld, clang, clangd, etc already installed
 # See: https://github.com/gitpod-io/workspace-images/blob/master/full/Dockerfile
-RUN apt-get install -y libclang-dev llvm-dev \
+RUN sudo apt-get install -y libclang-dev llvm-dev \
   && update-alternatives --install "/usr/bin/ld" "ld" "/usr/bin/lld"
 
 RUN set -ex \
