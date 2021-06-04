@@ -1002,12 +1002,14 @@ public:
 
     bool VisitDependentScopeDeclRefExpr(DependentScopeDeclRefExpr *Node) 
     {
+        bool shouldContinue = true;
         if (NestedNameSpecifier *Qualifier = Node->getQualifier())
             switch(Qualifier->getKind())
             {
                 case NestedNameSpecifier::SpecifierKind::TypeSpec:
                 case NestedNameSpecifier::SpecifierKind::TypeSpecWithTemplate:
                     OS << DlangBindGenerator::toDStyle(QualType(Qualifier->getAsType(), 0)) << ".";
+                    shouldContinue = false;
                     break;
                 default:
                     Qualifier->print(OS, Policy);
@@ -1017,7 +1019,7 @@ public:
         OS << Node->getNameInfo();
         if (Node->hasExplicitTemplateArgs())
             printDTemplateArgumentList(OS, Node->template_arguments(), Policy);
-        return true;
+        return shouldContinue;
     }
 
     bool VisitUnaryExprOrTypeTraitExpr(UnaryExprOrTypeTraitExpr *Node)
@@ -1185,6 +1187,21 @@ public:
         return false;
     }
 
+    bool VisitCXXTypeidExpr(CXXTypeidExpr* Node)
+    {
+        // not sure if this typeid or typeof
+        //   STL uses it as compile time typeof
+        // also doing this at runtime has side effect of executing the code in this expression,
+        // this is something that can't be ported
+        OS << "typeof(";
+        if (Node->isTypeOperand())
+            OS << DlangBindGenerator::toDStyle(Node->getTypeOperandSourceInfo()->getType());
+        else
+            OS << TraverseStmt(Node->getExprOperand());
+        OS << ")";
+        return false;
+    }
+
     bool VisitUnresolvedMemberExpr(UnresolvedMemberExpr *Node) 
     {
         if (!Node->isImplicitAccess()) {
@@ -1210,7 +1227,7 @@ public:
         OS << DlangBindGenerator::sanitizedIdentifier(Node->getNameInfo().getAsString());
         if (Node->hasExplicitTemplateArgs())
             printDTemplateArgumentList(OS, Node->template_arguments(), Policy);
-        return true;
+        return false;
     }
 
     bool VisitCXXNamedCastExpr(CXXNamedCastExpr *Node) 

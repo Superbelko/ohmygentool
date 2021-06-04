@@ -273,9 +273,22 @@ void handleDecl(Decl* decl, IAbstractGenerator* handler)
 		handler->onStaticAssertDecl(sa);
 	}
 
+	else if (isa<UsingShadowDecl>(decl))
+	{
+		// do nothing
+		// this is sister decl for using decl which introduces scope overloads
+		// similar to D alias
+		//
+		// class A : B
+		// {
+		//   alias foo = B.foo;
+		// }
+	}
+
 	else
 	{
 		llvm::outs() << "INFO: unhandled decl of kind '" << decl->getDeclKindName() << "' at " << path << '\n';
+		decl->dumpColor();
 	}
 }
 

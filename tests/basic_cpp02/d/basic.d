@@ -59,4 +59,6 @@ unittest
 {
 	import std.traits;
 	static assert (BitFields.sizeof == getUDAs!(BitFields, CppClassSizeAttr)[0].size);
+
+	static assert (is(ReturnType!(test_decltype!int) == IPtr!int));
 }

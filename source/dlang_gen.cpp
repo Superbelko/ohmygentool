@@ -1645,6 +1645,15 @@ std::string DlangBindGenerator::toDStyle(QualType type)
             res = "error-type"; // shouldn't reach
         }
     }
+    else if (const auto dt = typeptr->getAs<DecltypeType>())
+    {
+        std::string s;
+        llvm::raw_string_ostream os(s);
+        os << "typeof(";
+        printPrettyD(dt->getUnderlyingExpr(), os, nullptr, *DlangBindGenerator::g_printPolicy);
+        os << ")";
+        res = os.str();
+    }
     else
     {
         res = type.getAsString(*DlangBindGenerator::g_printPolicy);

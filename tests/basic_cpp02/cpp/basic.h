@@ -355,3 +355,11 @@ inline FilterType::Enum GetFilterType(FilterObjectAttributes attr)
 	return FilterType::Enum(attr & (FilterType::MAX-1));
 }
 // -------------------------
+
+// decltype test
+template<typename T>
+IPtr<T> test_decltype(T t)
+{
+    IPtr<decltype(t)> p;
+    return p;
+}
