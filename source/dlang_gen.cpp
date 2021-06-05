@@ -1061,16 +1061,35 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
         }
         else if (cxxdecl)
         {
+            static auto isTemplateKind = [](Type::TypeClass tk) -> bool {
+                switch(tk) {
+                    case Type::TemplateSpecialization:
+                    case Type::DependentName:
+                        return true;
+                }
+                return false;
+            };
+            static auto isTemplateType = [](RecordDecl* rec) -> bool {
+                // getKind() returns Decl::Kind while functions expects Type::TypeClass enum, but seems to work right now
+                if (isa<ClassTemplateSpecializationDecl>(rec) || isTemplateKind((Type::TypeClass) rec->getKind())) 
+                    return true;
+                return false;
+            };
+
             unsigned int numBases = cxxdecl->getNumBases();
             for (const auto b : cxxdecl->bases())
             {
                 numBases--;
                 RecordDecl* rd = b.getType()->getAsRecordDecl(); 
-                if (rd && !isPossiblyVirtual(cast<RecordDecl>(rd)))
-                    out << rd->getNameAsString() << " ";
-                // templated base class
-                else if (b.getType()->getTypeClass() == Type::TypeClass::TemplateSpecialization)
+                
+                if ( (rd && isTemplateType(rd)) 
+                     || b.getType()->isTypedefNameType()
+                     || isTemplateKind(b.getType()->getTypeClass()) )
+                {
                     out << toDStyle(b.getType()) << " ";
+                }
+                else if (rd && !isPossiblyVirtual(cast<RecordDecl>(rd)))
+                    out << rd->getNameAsString() << " ";
 
                 out << "_b" << baseid << ";" << std::endl;
                 if (baseid == 0) 
@@ -2350,6 +2369,7 @@ void DlangBindGenerator::writeFnRuntimeArgs(const clang::FunctionDecl* fn)
 void DlangBindGenerator::writeTemplateArgs(const clang::TemplateDecl* td)
 {
     const auto tplist = td->getTemplateParameters();
+    int pos = 0; // tplist has some weird positions...
     for (const auto tp : *tplist)
     {
         if (isa<NonTypeTemplateParmDecl>(tp))
@@ -2365,10 +2385,24 @@ void DlangBindGenerator::writeTemplateArgs(const clang::TemplateDecl* td)
                 out << " = " << os.str();
             }
         }
+        else if (isa<TemplateTypeParmDecl>(tp))
+        {
+            auto ty = cast<TemplateTypeParmDecl>(tp);
+
+            // make up parameter name
+            if (tp->getName().empty())
+                out << "T" << pos;
+            else 
+                out << ty->getName().str();
+            
+            if (ty->hasDefaultArgument())
+                out << " = " << toDStyle(ty->getDefaultArgument());
+        }
         else
             out << tp->getName().str();
         if (tp != *(tplist->end() - 1))
             out << ", ";
+        pos++;
     }
 }
 
