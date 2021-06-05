@@ -1061,39 +1061,19 @@ void DlangBindGenerator::onStructOrClassEnter(const clang::RecordDecl *decl)
         }
         else if (cxxdecl)
         {
-            static auto isTemplateKind = [](Type::TypeClass tk) -> bool {
-                switch(tk) {
-                    case Type::TemplateSpecialization:
-                    case Type::DependentName:
-                        return true;
-                }
-                return false;
-            };
-            static auto isTemplateType = [](RecordDecl* rec) -> bool {
-                // getKind() returns Decl::Kind while functions expects Type::TypeClass enum, but seems to work right now
-                if (isa<ClassTemplateSpecializationDecl>(rec) || isTemplateKind((Type::TypeClass) rec->getKind())) 
-                    return true;
-                return false;
-            };
-
             unsigned int numBases = cxxdecl->getNumBases();
             for (const auto b : cxxdecl->bases())
             {
                 numBases--;
-                RecordDecl* rd = b.getType()->getAsRecordDecl(); 
-                
-                if ( (rd && isTemplateType(rd)) 
-                     || b.getType()->isTypedefNameType()
-                     || isTemplateKind(b.getType()->getTypeClass()) )
-                {
-                    out << toDStyle(b.getType()) << " ";
-                }
-                else if (rd && !isPossiblyVirtual(cast<RecordDecl>(rd)))
-                    out << rd->getNameAsString() << " ";
 
+                // BaseType _b0;
+                out << toDStyle(b.getType()) << " ";
                 out << "_b" << baseid << ";" << std::endl;
+
+                // alias _b0 this;
                 if (baseid == 0) 
                     out << "alias " << "_b" << baseid << " this;" << std::endl;
+
                 baseid+=1;
             }
         }

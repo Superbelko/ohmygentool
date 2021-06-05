@@ -66,7 +66,8 @@ using namespace gentool;
 namespace fs = std::filesystem;
 #elif __cpp_lib_experimental_filesystem
 namespace fs = std::experimental::filesystem;
-#else error "C++17 Filesystem feature not detected"
+#else 
+#error "C++17 Filesystem feature not detected"
 #endif
 
 
