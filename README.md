@@ -52,7 +52,7 @@ USE ON YOUR OWN RISK!
 * D compiler (DMD or LDC2) with DUB build system (usually shipped with compiler)
 ##### Libraries
 * LLVM with Clang (versions 7.0-11.0)
-* RapidJSON
+* RapidJSON (cmake -DGENTOOL_LIB=OFF)
 
 *Clang 6 might work as well, but is not supported.
 
@@ -70,6 +70,12 @@ cd build
 cmake ../ -DCMAKE_GENERATOR_PLATFORM=x64 -DLLVM_DIR=/path/to/llvm/build
 cmake --build . --config Release
 ```
+
+extra step for dub builds
+```
+cd ..
+./dubBuild
+```
 *`-DCMAKE_GENERATOR_PLATFORM=x64` here is not required, just shows how to quickly generate x64 on Windows*
 
 *`-DGENTOOL_LIB=ON` can be used to build library usable with D main executable, doing this will generate `dubBuild.{sh|bat}` file with set up paths and variables for **building with dub***
@@ -81,5 +87,14 @@ cmake --build . --config Release
     Since Clang 9 some Linux package management systems taken a step to use LLVM/Clang as dynamic library, this is not recommended approach, in case if you have issues with it build and use static libs instead. Even though for personal use this might work, you are on your own.
 
 After these steps you will have nice and compact 66 MB executable.
+
+## Building (Docker)
+
+To build docker image simply run 
+```
+docker build -t gentool .
+```
+
+<br />
 
 ~~Relax and enjoy~~ Embrace the new pain and suffering possibilities when making extern(C)/extern(C++) bindings!
