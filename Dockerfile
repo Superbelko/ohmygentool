@@ -37,4 +37,4 @@ FROM ubuntu:21.04 as prod
 RUN apt-get update && apt-get install -y --no-install-recommends clang-11 llvm-11
 WORKDIR /root/
 COPY --from=build /gentool/build/gentool .
-CMD ["./gentool"]  
+ENTRYPOINT ["./gentool"]
