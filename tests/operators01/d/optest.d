@@ -1,7 +1,7 @@
 import core.stdc.string;
 import std.string : toStringz, fromStringz;
 import std.conv : to;
-import std.math : approxEqual;
+import std.math : approxEqual = isClose;
 
 import generated;
 

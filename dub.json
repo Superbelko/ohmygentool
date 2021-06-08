@@ -30,7 +30,7 @@
 	},
 	"targetPath": "build",
 	"dependencies": { 
-		"vibe-d:data": "~>0.8.5-rc.1"
+		"vibe-d:data": "~>0.9.0"
 	},
 	"libs": [
 		"gentool"
