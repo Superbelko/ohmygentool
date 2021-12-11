@@ -706,9 +706,10 @@ extern"C" API_EXPORT int gentool_run(int compilerArgc, const char** compilerArgv
 
 	llvm::install_fatal_error_handler(llvmOnError);
 
-	CommonOptionsParser op(compilerArgc, compilerArgv, MyToolCategory); // feed in argc, argv, kind of
-	ClangTool tool(op.getCompilations(), op.getSourcePathList());
-
+	auto op = CommonOptionsParser::create(compilerArgc, compilerArgv, MyToolCategory); // feed in argc, argv, kind of
+	if (!op)
+		throw std::runtime_error{"Could not create the CommonOptionsParser!"};
+	ClangTool tool(op->getCompilations(), op->getSourcePathList());
 
 	DlangBindGenerator generator;
 

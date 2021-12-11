@@ -1138,7 +1138,10 @@ void DlangBindGenerator::onEnum(const clang::EnumDecl *decl)
     for (const auto e : decl->enumerators())
     {
         out << "    ";
-        out << e->getNameAsString() << " = " << e->getInitVal().toString(10, true);
+
+        llvm::SmallString<20> str;
+        e->getInitVal().toString(str, 10, true);
+        out << e->getNameAsString() << " = " << str.c_str();
         if (size > 1)
             out << ", ";
         out << std::endl;
@@ -1467,7 +1470,10 @@ std::string DlangBindGenerator::toDStyle(QualType type)
                 std::string _res = toDStyle(arr->getElementType());
                 // do pointer replace with 1-sized arrays?
                 _res.append("[");
-                _res.append(arr->getSize().toString(10, false));
+				
+				llvm::SmallString<20> str;
+				arr->getSize().toString(str, 10, false);
+                _res.append(str.c_str());
                 _res.append("]");
                 res = _res;
             }
@@ -1541,7 +1547,7 @@ std::string DlangBindGenerator::toDStyle(QualType type)
             else if (arg.getKind() == TemplateArgument::ArgKind::Type)
                 os << toDStyle(arg.getAsType());
             else
-                arg.print(*DlangBindGenerator::g_printPolicy, os);
+                arg.print(*DlangBindGenerator::g_printPolicy, os, true);
             i += 1;
         }
         os << ")";
@@ -2395,11 +2401,13 @@ void DlangBindGenerator::writeTemplateArgs(const clang::TemplateArgumentList* ta
         auto tk = tp.getKind();
         std::string s;
         llvm::raw_string_ostream os(s);
+		llvm::SmallString<20> str;
         switch(tk)
         {
             case TemplateArgument::ArgKind::Integral:
                 out << intTypeForSize(tp.getAsIntegral().getBitWidth()) << " T: ";
-                out << tp.getAsIntegral().toString(10);
+				tp.getAsIntegral().toString(str, 10);
+                out << str.c_str();
                 break;
             case TemplateArgument::ArgKind::Expression:
                 printPrettyD(tp.getAsExpr(), os, nullptr, *DlangBindGenerator::g_printPolicy);
