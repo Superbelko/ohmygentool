@@ -1466,8 +1466,11 @@ public:
             return;
         */
         bool isSigned = Node->getType()->isSignedIntegerType();
-        OS << Node->getValue().toString(10, isSigned);
-
+		
+		llvm::SmallString<20> str;
+        Node->getValue().toString(str, 10, isSigned);
+		OS << str.c_str();
+		
         // Emit suffixes.  Integer literals are always a builtin integer type.
         switch (Node->getType()->getAs<BuiltinType>()->getKind()) 
         {
@@ -1689,7 +1692,7 @@ void printDTemplateArgumentList(raw_ostream &OS, ArrayRef<TA> Args,
             if (Argument.getKind() == TemplateArgument::ArgKind::Type)
                 ArgOS << DlangBindGenerator::toDStyle(Argument.getAsType());
             else
-                Argument.print(Policy, ArgOS);
+                Argument.print(Policy, ArgOS, true);
         }
 
         OS << ArgOS.str();
