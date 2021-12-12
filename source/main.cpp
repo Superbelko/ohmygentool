@@ -706,7 +706,7 @@ extern"C" API_EXPORT int gentool_run(int compilerArgc, const char** compilerArgv
 
 	llvm::install_fatal_error_handler(llvmOnError);
 
-	auto op = CommonOptionsParser::create(compilerArgc, compilerArgv, MyToolCategory); // feed in argc, argv, kind of
+	auto op = CommonOptionsParser::create(compilerArgc, compilerArgv, MyToolCategory, llvm::cl::OneOrMore, nullptr); // feed in argc, argv, kind of
 	if (!op)
 		throw std::runtime_error{"Could not create the CommonOptionsParser! Please verify your command-line arguments."};
 	ClangTool tool(op->getCompilations(), op->getSourcePathList());
