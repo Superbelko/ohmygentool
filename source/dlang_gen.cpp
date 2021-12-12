@@ -1138,9 +1138,12 @@ void DlangBindGenerator::onEnum(const clang::EnumDecl *decl)
     for (const auto e : decl->enumerators())
     {
         out << "    ";
-
         llvm::SmallString<20> str;
+#if (LLVM_VERSION_MAJOR < 13)
+        e->getInitVal().toString(str, 10);
+#else
         e->getInitVal().toString(str, 10, true);
+#endif
         out << e->getNameAsString() << " = " << str.c_str();
         if (size > 1)
             out << ", ";
@@ -1472,7 +1475,11 @@ std::string DlangBindGenerator::toDStyle(QualType type)
                 _res.append("[");
 				
 				llvm::SmallString<20> str;
+#if (LLVM_VERSION_MAJOR < 13)
+                arr->getSize().toString(str, 10);
+#else
 				arr->getSize().toString(str, 10, false);
+#endif
                 _res.append(str.c_str());
                 _res.append("]");
                 res = _res;
@@ -1547,7 +1554,14 @@ std::string DlangBindGenerator::toDStyle(QualType type)
             else if (arg.getKind() == TemplateArgument::ArgKind::Type)
                 os << toDStyle(arg.getAsType());
             else
+            {
+
+            #if (LLVM_VERSION_MAJOR < 13)
+                arg.print(*DlangBindGenerator::g_printPolicy, os);
+            #else
                 arg.print(*DlangBindGenerator::g_printPolicy, os, true);
+            #endif
+            }
             i += 1;
         }
         os << ")";
@@ -2406,8 +2420,12 @@ void DlangBindGenerator::writeTemplateArgs(const clang::TemplateArgumentList* ta
         {
             case TemplateArgument::ArgKind::Integral:
                 out << intTypeForSize(tp.getAsIntegral().getBitWidth()) << " T: ";
-				tp.getAsIntegral().toString(str, 10);
-                out << str.c_str();
+                #if (LLVM_VERSION_MAJOR < 13)
+                    out << tp.getAsIntegral().toString(10);
+                #else
+				    tp.getAsIntegral().toString(str, 10);
+                    out << str.c_str();
+                #endif
                 break;
             case TemplateArgument::ArgKind::Expression:
                 printPrettyD(tp.getAsExpr(), os, nullptr, *DlangBindGenerator::g_printPolicy);
