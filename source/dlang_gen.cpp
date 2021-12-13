@@ -1137,13 +1137,10 @@ void DlangBindGenerator::onEnum(const clang::EnumDecl *decl)
 
     for (const auto e : decl->enumerators())
     {
-        out << "    ";
         llvm::SmallString<20> str;
-#if (LLVM_VERSION_MAJOR < 13)
-        e->getInitVal().toString(str, 10);
-#else
-        e->getInitVal().toString(str, 10, true);
-#endif
+        e->getInitVal().toString(str, 10, e->getInitVal().isSigned());
+        
+        out << "    ";
         out << e->getNameAsString() << " = " << str.c_str();
         if (size > 1)
             out << ", ";
@@ -1470,17 +1467,13 @@ std::string DlangBindGenerator::toDStyle(QualType type)
         {
             if (const auto arr = llvm::dyn_cast<ConstantArrayType>(type))
             {
-                std::string _res = toDStyle(arr->getElementType());
                 // do pointer replace with 1-sized arrays?
-                _res.append("[");
-				
 				llvm::SmallString<20> str;
-#if (LLVM_VERSION_MAJOR < 13)
-                arr->getSize().toString(str, 10);
-#else
 				arr->getSize().toString(str, 10, false);
-#endif
-                _res.append(str.c_str());
+
+                std::string _res = toDStyle(arr->getElementType());
+                _res.append("[");
+				_res.append(static_cast<std::string>(str));
                 _res.append("]");
                 res = _res;
             }

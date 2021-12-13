@@ -1468,11 +1468,7 @@ public:
         bool isSigned = Node->getType()->isSignedIntegerType();
 		
 		llvm::SmallString<20> str;
-        #if (LLVM_VERSION_MAJOR < 13)
-            str = Node->getValue().toString(str, 10);
-        #else
-            Node->getValue().toString(str, 10, isSigned);
-        #endif
+        Node->getValue().toString(str, 10, isSigned);
 		OS << str.c_str();
 		
         // Emit suffixes.  Integer literals are always a builtin integer type.
