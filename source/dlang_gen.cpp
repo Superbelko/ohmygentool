@@ -650,7 +650,7 @@ const FunctionDecl* getFnBody(const FunctionDecl* base)
 
 bool DlangBindGenerator::isRelevantPath(const std::string_view path)
 {
-    if (path.size() == 0 || path.compare("<invalid loc>") == 0) 
+    if (path.size() == 0 || path.compare("<invalid loc>") == 0 || path.compare("<built-in>") == 0) 
         return false;
 
     auto [fullPath, _] = getFSPathPart(path);
@@ -1886,7 +1886,7 @@ void DlangBindGenerator::handleFields(const clang::RecordDecl *decl)
 
         TypeInfo finfo;
         if (!isDependent)
-        if (!isForwardDecl || it->getType()->isBuiltinType() || it->getType()->isPointerType() || it->getType()->isArrayType())
+        if (!isForwardDecl && (it->getType()->isBuiltinType() || it->getType()->isPointerType() || it->getType()->isArrayType()))
         {
             finfo = it->getASTContext().getTypeInfo(it->getType()); 
         }

@@ -1153,18 +1153,23 @@ public:
 
         if (auto op = Node->getMemberNameInfo().getName().getCXXOverloadedOperator(); op != OO_None)
         {
-            auto context = const_cast<ASTContext*>(Context);
-            const auto& p = context->getParentMapContext().getParents(*Node);
-            if (!p.empty())
+            if (auto context = const_cast<ASTContext*>(Context))
             {
-                if (auto call = p[0].get<CallExpr>())
+                const auto& p = context->getParentMapContext().getParents(*Node);
+                if (!p.empty())
                 {
-                    OS << DlangBindGenerator::getOperatorString(op, call->getNumArgs());
+                    if (auto call = p[0].get<CallExpr>())
+                    {
+                        OS << DlangBindGenerator::getOperatorString(op, call->getNumArgs());
+                    }
+                    else
+                        goto Lprint_as_is;
                 }
                 else
-                    OS << DlangBindGenerator::getOperatorString(op);
+                    goto Lprint_as_is;
             }
             else
+Lprint_as_is:
                 OS << DlangBindGenerator::getOperatorString(op);
         }
         else
@@ -1601,6 +1606,8 @@ public:
     bool needsNarrowCast(Expr* lhs, Expr* rhs)
     {
         if (lhs->getType() == rhs->getType())
+            return false;
+        if (!Context) // usually with templates
             return false;
         auto lhsTypeSize = Context->getTypeSizeInCharsIfKnown(lhs->getType());
         auto rhsTypeSize = Context->getTypeSizeInCharsIfKnown(rhs->IgnoreImpCasts()->getType());
