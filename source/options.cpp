@@ -13,21 +13,40 @@ namespace gentool
         cflags.assign(opts.cflags, opts.cflags + opts.cflagsNum);
         standard = std::string(opts.standard);
     }
-    
-    options_impl::InputOptionsTmp InputOptions::toPlainC() const
+
+    CInputOptions InputOptions::toPlainC() const
     {
-        InputOptionsTmp res;
-        res.standard = standard.c_str();
-        for(auto it : paths)
-            res.paths.push_back(it.c_str());
-        for(auto it : defines)
-            res.defines.push_back(it.c_str());
-        for(auto it : includes)
-            res.includes.push_back(it.c_str());
-        for(auto it : systemIncludes)
-            res.systemIncludes.push_back(it.c_str());
-        for(auto it : cflags)
-            res.cflags.push_back(it.c_str());
+        // TODO: this will leak but for now it's ok since all this junk will be removed later on
+        CInputOptions res;
+
+
+        res.standard = standard.data();
+
+        res.paths = new const char*[paths.size()];
+        res.pathsNum = paths.size();
+        for(auto i = 0; i < paths.size(); i++)
+            res.paths[i] = paths[i].data();
+
+        res.defines = new const char*[defines.size()];
+        res.definesNum = defines.size();
+        for(auto i = 0; i < defines.size(); i++)
+            res.defines[i] = defines[i].data();
+
+        res.includes = new const char*[includes.size()];
+        res.includesNum = includes.size();
+        for(auto i = 0; i < includes.size(); i++)
+            res.includes[i] = includes[i].data();
+
+        res.systemIncludes = new const char*[systemIncludes.size()];
+        res.systemIncludesNum = systemIncludes.size();
+        for(auto i = 0; i < systemIncludes.size(); i++)
+            res.systemIncludes[i] = systemIncludes[i].data();
+
+        res.cflags = new const char*[cflags.size()];
+        res.cflagsNum = cflags.size();
+        for(auto i = 0; i < cflags.size(); i++)
+            res.cflags[i] = cflags[i].data();
+
         return res;
     }
 
@@ -37,13 +56,38 @@ namespace gentool
         path = std::string(opts.path);
     }
     
-    options_impl::OutputOptionsTmp OutputOptions::toPlainC() const
+    COutputOptions OutputOptions::toPlainC() const
     {
-        OutputOptionsTmp res;
-        res.path = path.c_str();
-        for(auto it : extras)
-            res.extras.push_back(it.c_str());
+        // TODO: this will leak but for now it's ok since all this junk will be removed later on
+        COutputOptions res;
+        res.path = path.data();
+
+        res.extras = new const char*[extras.size()];
+        res.extrasNum = extras.size();
+        for(auto i = 0; i < extras.size(); i++)
+            res.extras[i] = extras[i].data();
         return res;
+    }
+
+    void cleanup(CInputOptions& opts)
+    {
+        if (opts.cflags)
+            delete opts.cflags;
+        if (opts.defines)
+            delete opts.defines;
+        if (opts.paths)
+            delete opts.paths;
+        if (opts.systemIncludes)
+            delete opts.systemIncludes;
+        if (opts.includes)
+            delete opts.includes;
+        opts = {0};
+    }
+    void cleanup(COutputOptions& opts)
+    {
+        if (opts.extras)
+            delete opts.extras;
+        opts = {0};
     }
 
 

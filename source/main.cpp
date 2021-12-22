@@ -26,6 +26,7 @@
 
 #include "rapidjson/document.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/ScopeExit.h"
 #include "clang/AST/AST.h"
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/Decl.h"
@@ -762,7 +763,11 @@ int main(int argc, const char **argv)
 	}
 	int cmdArgc = (int)cmdArgv.size();
 
-	return gentool_run(cmdArgc, cmdArgv.data(), input.toPlainC(), output.toPlainC());
+	auto in = input.toPlainC();
+	auto out = output.toPlainC();
+	auto _a = llvm::make_scope_exit([&in]{ cleanup(in); });
+	auto _b = llvm::make_scope_exit([&out]{ cleanup(out); });
+	return gentool_run(cmdArgc, cmdArgv.data(), in, out);
 } // main()
 
 #endif // ifndef USE_LIB_TARGET

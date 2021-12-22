@@ -55,7 +55,7 @@ namespace gentool
         InputOptions() = default;
         InputOptions(const CInputOptions& opts);
         // makes shallow copy for use within C
-        options_impl::InputOptionsTmp toPlainC() const;
+        CInputOptions toPlainC() const;
     };
 
 
@@ -67,8 +67,13 @@ namespace gentool
         OutputOptions() = default;
         OutputOptions(const COutputOptions& opts);
         // makes shallow copy for use within C
-        options_impl::OutputOptionsTmp toPlainC() const;
+        COutputOptions toPlainC() const;
     };
+
+    /// frees up memory allocated using C++ new operator
+    void cleanup(CInputOptions& opts);
+    /// ditto
+    void cleanup(COutputOptions& opts);
 
     namespace options_impl 
     {
