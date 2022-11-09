@@ -1,4 +1,4 @@
-FROM ubuntu:21.04 as build
+FROM ubuntu:22.04 as build
 
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   ninja-build make \
   clang-11 lld-11 \
   libclang-11-dev llvm-11-dev \
+  rapidjson-dev \
   curl wget \
   ca-certificates \
   && update-alternatives --install "/usr/bin/ld" "ld" "/usr/bin/lld-11" 50 \
@@ -33,7 +34,7 @@ RUN rm -rf build && mkdir build && cd build \
     && ./dubBuild.sh
 
 # prod image
-FROM ubuntu:21.04 as prod
+FROM ubuntu:22.04 as prod
 RUN apt-get update && apt-get install -y --no-install-recommends clang-11 llvm-11
 WORKDIR /root/
 COPY --from=build /gentool/build/gentool .
