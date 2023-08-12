@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.3) # 3.10 for VS /std:c++17 switch
+cmake_minimum_required(VERSION 3.10) # 3.10 for VS /std:c++17 switch
 project(gentool)
 
 option(GENTOOL_LIB "Build gentool as library")

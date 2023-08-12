@@ -19,16 +19,16 @@ jobs:
     - uses: actions/checkout@v2
     - uses: dlang-community/setup-dlang@4c99aa991ce7d19dd3064de0a4f2f6b2f152e2d7
       with:
-        compiler: ldc-latest
+        compiler: ldc-1.32.2
 
     - name: 'Get clang packages'
       run: |
-        sudo apt-get install -y libclang-11-dev llvm-11-dev lld-11
+        sudo apt-get install -y libclang-14-dev llvm-14-dev lld-14
         # symlink needed otherwise link will fail
-        sudo ln -s /usr/lib/llvm-11/lib/libclang-cpp.so.11 /usr/lib/llvm-11/lib/libclang-cpp.so
+        sudo ln -s /usr/lib/llvm-14/lib/libclang-cpp.so.14 /usr/lib/llvm-14/lib/libclang-cpp.so
       
     - name: 'Use lld linker'
-      run: sudo update-alternatives --install "/usr/bin/ld" "ld" "/usr/bin/lld-11" 50
+      run: sudo update-alternatives --install "/usr/bin/ld" "ld" "/usr/bin/lld-14" 50
       
     - name: 'Build library'
       run: |
@@ -37,7 +37,7 @@ jobs:
         mkdir build
         cd build
         # Use specific version
-        export LLVM_DIR=/usr/lib/llvm-11/lib/cmake/llvm
+        export LLVM_DIR=/usr/lib/llvm-14/lib/cmake/llvm
         cmake .. -DGENTOOL_LIB=ON 
         cmake --build . --config Release
       

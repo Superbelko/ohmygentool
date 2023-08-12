@@ -289,7 +289,13 @@ void printQualifier(NestedNameSpecifier* qualifier, llvm::raw_ostream& os)
         const Type *T = qualifier->getAsType();
         if (const TemplateSpecializationType *SpecType = dyn_cast<TemplateSpecializationType>(T)) 
         {
-            SpecType->getTemplateName().print(os, *DlangBindGenerator::g_printPolicy, true);
+#if (LLVM_VERSION_MAJOR > 12)
+#define SUPPRESS_NNM TemplateName::Qualified::None
+#else
+#define SUPPRESS_NNM true
+#endif
+            SpecType->getTemplateName().print(os, *DlangBindGenerator::g_printPolicy, SUPPRESS_NNM);
+#undef SUPPRESS_NNM
             printDTemplateArgumentList(os, SpecType->template_arguments(), *DlangBindGenerator::g_printPolicy);
         } else if (const TemplateTypeParmType* SpecType = dyn_cast<TemplateTypeParmType>(T)) {
             if (auto id = SpecType->getIdentifier()) {
@@ -2977,3 +2983,6 @@ void IncludeMap::add(const std::string& header, const std::string& mappedModule)
 
     _mappings.insert(std::make_pair(header, mappedModule));
 }
+
+void dumpDecl(const clang::Decl* decl) { decl->dump(); }
+void dumpStmt(const clang::Stmt* stmt) { stmt->dump(); }
