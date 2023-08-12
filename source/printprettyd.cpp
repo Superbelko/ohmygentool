@@ -645,6 +645,18 @@ public:
         if (isBaseCtor || E->isElidable())
             prependType = false;
 
+        // appers when explicitly returns constructed copy
+        // e.g. "return s" doesn't have it, but "return Mat22(s)" does
+        // but note that without xvalue test it chomps variable assignment construction too
+        if (E->getArgs() && isa<ImplicitCastExpr>(E->getArg(0)))
+        {
+            if (auto impcast = llvm::cast_or_null<ImplicitCastExpr>(E->getArg(0))) 
+            {
+                if (impcast->getCastKind() == clang::CastKind::CK_NoOp && impcast->isXValue())
+                    prependType = false;
+            }
+        }
+
         // if doesn't have braces might mean it is implicit ctor match
         if (prependType)// && !isCtorInitializer)
         {

@@ -624,8 +624,12 @@ std::vector<std::string> makeCompilerCommandLineArgs(gentool::InputOptions& inpu
 	return cmd;
 }
 
-
+// oof, messy
+#if (LLVM_VERSION_MAJOR > 12)
+void llvmOnError(void *user_data, const char* reason, bool gen_crash_diag)
+#else
 void llvmOnError(void *user_data, const std::string& reason, bool gen_crash_diag)
+#endif 
 {
 	std::cout << reason << std::endl;
 }

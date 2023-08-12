@@ -72,6 +72,10 @@ string makeEnv(string[] libs, string llvmDir = null, string buildType = null)
 
     // folder that contains llvm cmake config (e.g. ~/llvm-build/lib/cmake/llvm)
     // we are interested in static libraries files location
+    // note: ubuntu 23 and LLVM 14 has cmake config in two locations
+    //  1) /usr/lib/llvm-14/lib/cmake/llvm/
+    //  2) /usr/lib/llvm-14/cmake/
+    // no idea which is what... but option 2 will result in wrong lib path
     if (llvmDir)
     {
         llvmDir = buildNormalizedPath(llvmDir, "..", "..");

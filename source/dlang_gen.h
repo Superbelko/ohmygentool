@@ -61,6 +61,10 @@
 // Gathers 'actions' to take after translation
 class FeedbackContext;
 
+// just a helper that redirects to decl->dump(), useful e.g. when no debug symbols for clang is available
+void dumpDecl(const clang::Decl* decl);
+void dumpStmt(const clang::Stmt* stmt);
+
 // Similar to default printPretty for expressions, except prints D from C++ AST
 void printPrettyD(const clang::Stmt *stmt, llvm::raw_ostream &OS, clang::PrinterHelper *Helper,
                      const clang::PrintingPolicy &Policy, unsigned Indentation = 0,
