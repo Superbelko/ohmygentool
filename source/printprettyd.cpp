@@ -1623,8 +1623,14 @@ Lprint_as_is:
             return false;
         auto lhsTypeSize = Context->getTypeSizeInCharsIfKnown(lhs->getType());
         auto rhsTypeSize = Context->getTypeSizeInCharsIfKnown(rhs->IgnoreImpCasts()->getType());
+#if (LLVM_VERSION_MAJOR > 15)
+#define hasValue has_value
+#define getValue value
+#endif
         if (lhsTypeSize.hasValue() && rhsTypeSize.hasValue())
             return lhsTypeSize.getValue() < rhsTypeSize.getValue();
+#undef hasValue
+#undef getValue
         return false;
     }
 
