@@ -1542,7 +1542,11 @@ std::string DlangBindGenerator::toDStyle(QualType type)
         os << "!"
            << "(";
         //s.clear();
+#if (LLVM_VERSION_MAJOR > 15)
+        const auto numArgs = tsp->template_arguments().size();
+#else
         const auto numArgs = tsp->getNumArgs();
+#endif
         unsigned int i = 0;
         for (const auto arg : tsp->template_arguments())
         {
@@ -1649,9 +1653,13 @@ std::string DlangBindGenerator::toDStyle(QualType type)
     {
         if (auto typeparm = subst->getReplacedParameter())
         {
-
+#if (LLVM_VERSION_MAJOR > 15)
+            if (typeparm->getTypeForDecl())
+                res = toDStyle(QualType(typeparm->getTypeForDecl(),0));
+#else
             if (auto d = typeparm->getDecl())
                 res = toDStyle(QualType(d->getTypeForDecl(),0));
+#endif
             else if (auto id = typeparm->getIdentifier())
                 res = id->getName().str();
             else 

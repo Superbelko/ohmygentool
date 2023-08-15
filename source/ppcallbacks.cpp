@@ -113,7 +113,13 @@ void PPCallbacksTracker::InclusionDirective(
     llvm::StringRef FileName,
     bool IsAngled,
     clang::CharSourceRange FilenameRange,
+#if (LLVM_VERSION_MAJOR > 15)
+    clang::OptionalFileEntryRef File,
+#elif (LLVM_VERSION_MAJOR > 14)
+    llvm::Optional<clang::FileEntryRef> File,
+#else
     const clang::FileEntry *File,
+#endif
     llvm::StringRef SearchPath,
     llvm::StringRef RelativePath,
     const clang::Module *Imported,
