@@ -23,12 +23,12 @@ jobs:
 
     - name: 'Get clang packages'
       run: |
-        sudo apt-get install -y libclang-14-dev llvm-14-dev lld-14
+        sudo apt-get install -y libclang-16-dev llvm-16-dev lld-16
         # symlink needed otherwise link will fail
-        sudo ln -s /usr/lib/llvm-14/lib/libclang-cpp.so.14 /usr/lib/llvm-14/lib/libclang-cpp.so
+        sudo ln -s /usr/lib/llvm-16/lib/libclang-cpp.so.16 /usr/lib/llvm-16/lib/libclang-cpp.so
       
     - name: 'Use lld linker'
-      run: sudo update-alternatives --install "/usr/bin/ld" "ld" "/usr/bin/lld-14" 50
+      run: sudo update-alternatives --install "/usr/bin/ld" "ld" "/usr/bin/lld-16" 50
       
     - name: 'Build library'
       run: |
@@ -37,7 +37,7 @@ jobs:
         mkdir build
         cd build
         # Use specific version
-        export LLVM_DIR=/usr/lib/llvm-14/lib/cmake/llvm
+        export LLVM_DIR=/usr/lib/llvm-16/lib/cmake/llvm
         cmake .. -DGENTOOL_LIB=ON 
         cmake --build . --config Release
       
