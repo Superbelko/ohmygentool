@@ -2668,8 +2668,14 @@ void DlangBindGenerator::writeFnBody(clang::FunctionDecl* fn, bool commentOut)
                             }
                         }
                     }
-                    else
+                    else {
+                        // pass initialization to our fake base
+                        if (init->isBaseInitializer()) {
+                            // TODO: fix indexing, must match actualtarget base
+                            out << "_b0 = ";
+                        }
                         out << sanitizedIdentifier(toDStyle(QualType(init->getBaseClass(), 0)));
+                    }
                 }
                 writeMultilineExpr(init);
                 out << ";" << std::endl;

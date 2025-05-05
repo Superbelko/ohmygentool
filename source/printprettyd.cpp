@@ -228,8 +228,13 @@ public:
         OS << "static assert";
         OS << "(";
         TraverseStmt(Decl->getAssertExpr());
-        if (auto msg = Decl->getMessage())
+        if (auto msgExpr = Decl->getMessage())
         {
+            #if (LLVM_VERSION_MAJOR < 17)
+            #define msg msgExpr
+            #else
+            auto msg = llvm::cast_or_null<StringLiteral>(msgExpr);
+            #endif 
             if (msg->getLength() > 0)
             {
                 OS << ", ";
@@ -1608,9 +1613,12 @@ Lprint_as_is:
         #if (LLVM_VERSION_MAJOR < 8)
             llvm::APSInt res;
             isNullVal = intLiteral->EvaluateAsInt(res, *Context) && res.isNullValue();
-        #else
+        #elif (LLVM_VERSION_MAJOR < 17)
             Expr::EvalResult res;
             isNullVal = intLiteral->EvaluateAsInt(res, *Context) && res.Val.getInt().isNullValue();
+        #else 
+            Expr::EvalResult res;
+            isNullVal = intLiteral->EvaluateAsInt(res, *Context) && res.Val.getInt().isZero();
         #endif
         return isNullVal;
     }
