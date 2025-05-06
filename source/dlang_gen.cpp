@@ -2230,8 +2230,16 @@ void DlangBindGenerator::handleMethods(const clang::CXXRecordDecl *decl)
         if (m->isStatic())
             out << "static ";
 
+#if LLVM_VERSION_MAJOR > 17
+#define isPure isPureVirtual
+#endif
+
         if (isVirtualDecl && m->isPure())
             out << "abstract ";
+
+#if LLVM_VERSION_MAJOR > 17
+#undef isPure
+#endif
 
         if (isVirtualDecl && possibleOverride)
             out << "override ";

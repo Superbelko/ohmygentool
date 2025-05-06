@@ -35,6 +35,9 @@ using namespace clang::ast_matchers;
 using namespace clang::driver;
 using namespace clang::tooling;
 
+#if LLVM_VERSION_MAJOR < 17
+using CharacterLiteralKind = CharacterLiteral;
+#endif
 
 
 
@@ -1108,14 +1111,17 @@ public:
         */
         OS << DlangBindGenerator::toDStyle(E->getAllocatedType());
 
-        CXXNewExpr::InitializationStyle InitStyle = E->getInitializationStyle();
-        if (InitStyle)
-        {
-            if (InitStyle == CXXNewExpr::CallInit)
-                OS << "(";
-            TraverseStmt(E->getInitializer());
-            if (InitStyle == CXXNewExpr::CallInit)
-                OS << ")";
+#if LLVM_VERSION_MAJOR < 18
+        bool isInitStyleParens = E->getInitializationStyle() == CXXNewExpr::CallInit;
+#else
+        bool isInitStyleParens = E->getInitializationStyle() == CXXNewInitializationStyle::Parens;
+#endif
+        if (isInitStyleParens) {
+            OS << "(";
+        }
+        TraverseStmt(E->getInitializer());
+        if (isInitStyleParens) {
+            OS << ")";
         }
 
         if (NumPlace > 0)
@@ -1571,7 +1577,7 @@ Lprint_as_is:
             // would result in an invalid \U escape sequence.
             // FIXME: multicharacter literals such as '\xFF\xFF\xFF\xFF'
             // are not correctly handled.
-            if ((value & ~0xFFu) == ~0xFFu && Node->getKind() == CharacterLiteral::Ascii)
+            if ((value & ~0xFFu) == ~0xFFu && Node->getKind() == CharacterLiteralKind::Ascii)
                 value &= 0xFFu;
             if (value < 256 && isPrintable((unsigned char)value))
                 OS << "'" << (char)value << "'";
@@ -1585,17 +1591,17 @@ Lprint_as_is:
 
         switch (Node->getKind())
         {
-        case CharacterLiteral::Ascii:
+        case CharacterLiteralKind::Ascii:
             break; // no prefix.
-        case CharacterLiteral::Wide:
+        case CharacterLiteralKind::Wide:
             OS << 'w';
             break;
-        case CharacterLiteral::UTF8:
+        case CharacterLiteralKind::UTF8:
             break;
-        case CharacterLiteral::UTF16:
+        case CharacterLiteralKind::UTF16:
             OS << 'w';
             break;
-        case CharacterLiteral::UTF32:
+        case CharacterLiteralKind::UTF32:
             OS << 'd';
             break;
         }

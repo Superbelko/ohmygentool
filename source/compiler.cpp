@@ -13,8 +13,13 @@
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Lex/PreprocessorOptions.h"
 #include "clang/Parse/ParseAST.h"
-#include "llvm/Support/Host.h"
 #include "llvm/Support/raw_ostream.h"
+
+#if LLVM_VERSION_MAJOR > 17
+#include "llvm/TargetParser/Host.h"
+#else
+#include "llvm/Support/Host.h"
+#endif
 
 
 Compiler* createCompiler(const char* file)
@@ -39,10 +44,12 @@ Compiler* createCompiler(const char* file)
     TheCompInst->createASTContext();
 
     // Set the main file handled by the source manager to the input file.
-#if (LLVM_VERSION_MAJOR < 11)
-    const clang::FileEntry *FileIn = FileMgr.getFile(file);
+#if (LLVM_VERSION_MAJOR > 17)
+const clang::FileEntryRef FileIn = FileMgr.getFileRef(file).get();
+#elif (LLVM_VERSION_MAJOR > 12)
+const clang::FileEntry *FileIn = FileMgr.getFile(file).get();
 #else
-    const clang::FileEntry *FileIn = FileMgr.getFile(file).get();
+const clang::FileEntry *FileIn = FileMgr.getFile(file);
 #endif
     auto id = SourceMgr.getOrCreateFileID(FileIn, clang::SrcMgr::CharacteristicKind::C_User);
     SourceMgr.setMainFileID(id);
