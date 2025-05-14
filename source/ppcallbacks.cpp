@@ -123,6 +123,9 @@ void PPCallbacksTracker::InclusionDirective(
     llvm::StringRef SearchPath,
     llvm::StringRef RelativePath,
     const clang::Module *Imported,
+#if (LLVM_VERSION_MAJOR > 18)
+		bool ModuleImported,
+#endif
     clang::SrcMgr::CharacteristicKind FileType)
 {
     Listener->onInclude(FileName, RelativePath, SearchPath, IsAngled, FileType);

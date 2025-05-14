@@ -170,9 +170,13 @@ std::string getPathForDecl(const Decl* decl, SourceManager& srcMgr)
 
 	auto sfile = srcMgr.getFileID(decl->getLocation());
 	auto* f = srcMgr.getFileEntryForID(sfile);
-	if (f)
+	if (f) {
+#if LLVM_VERSION_MAJOR < 19
 		path = std::string(f->getName());
-	else { 
+#else
+		path = f->tryGetRealPathName().str();
+#endif 
+	} else { 
 		std::string s;
 		llvm::raw_string_ostream os(s);
 		auto sloc = sfile.isValid() ? decl->getLocation() : decl->getBeginLoc();

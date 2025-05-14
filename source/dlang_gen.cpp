@@ -2392,12 +2392,19 @@ void DlangBindGenerator::writeTemplateArgs(const clang::TemplateDecl* td)
             auto nt = cast<NonTypeTemplateParmDecl>(tp);
             out << toDStyle(nt->getType()) << " ";
             out << tp->getNameAsString();
-            if (auto defaultVal = nt->getDefaultArgument())
+            if (nt->hasDefaultArgument())
             {
-                std::string s;
-                llvm::raw_string_ostream os(s);
-                printPrettyD(defaultVal, os, nullptr, *DlangBindGenerator::g_printPolicy, 0, &td->getASTContext(), feedback);
-                out << " = " << os.str();
+                #if LLVM_VERSION_MAJOR < 19
+                if (auto defaultVal = nt->getDefaultArgument())
+                #else
+                if (auto defaultVal = nt->getDefaultArgument().getArgument().getAsExpr())
+                #endif
+                {
+                    std::string s;
+                    llvm::raw_string_ostream os(s);
+                    printPrettyD(defaultVal, os, nullptr, *DlangBindGenerator::g_printPolicy, 0, &td->getASTContext(), feedback);
+                    out << " = " << os.str();
+                }
             }
         }
         else if (isa<TemplateTypeParmDecl>(tp))
@@ -2410,8 +2417,13 @@ void DlangBindGenerator::writeTemplateArgs(const clang::TemplateDecl* td)
             else 
                 out << ty->getName().str();
             
-            if (ty->hasDefaultArgument())
+            if (ty->hasDefaultArgument()) {
+                #if LLVM_VERSION_MAJOR < 19
                 out << " = " << toDStyle(ty->getDefaultArgument());
+                #else
+                out << " = " << toDStyle(ty->getDefaultArgument().getArgument().getAsType());
+                #endif
+            }
         }
         else
             out << tp->getName().str();
@@ -2474,12 +2486,19 @@ void DlangBindGenerator::writeTemplateArgs(const clang::TemplateParameterList* t
         {
             auto nt = cast<NonTypeTemplateParmDecl>(T);
             out << toDStyle(nt->getType()) << " ";
-            if (auto defaultVal = nt->getDefaultArgument())
+            if (nt->hasDefaultArgument()) 
             {
-                std::string s;
-                llvm::raw_string_ostream os(s);
-                printPrettyD(defaultVal, os, nullptr, *DlangBindGenerator::g_printPolicy);
-                out << " = " << os.str();
+                #if LLVM_VERSION_MAJOR < 19
+                if (auto defaultVal = nt->getDefaultArgument())
+                #else
+                if (auto defaultVal = nt->getDefaultArgument().getArgument().getAsExpr())
+                #endif
+                {
+                    std::string s;
+                    llvm::raw_string_ostream os(s);
+                    printPrettyD(defaultVal, os, nullptr, *DlangBindGenerator::g_printPolicy);
+                    out << " = " << os.str();
+                }
             }
         }
         out << T->getName().str();
